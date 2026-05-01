@@ -176,16 +176,52 @@
   }
 
   /* Input */
+  .input-group {
+    @apply grid gap-2;
+  }
+
   .input-primary {
     @apply block w-full rounded-lg border border-dashboard-border px-3 py-2 text-sm text-foreground shadow-sm placeholder:text-muted outline-none transition-all;
     @apply hover:border-slate-400;
     @apply focus:border-brand focus:ring-4 focus:ring-brand/10;
+    pointer-events: auto;
   }
 
-  /* Button */
+  .input-primary,
+  .input-group select,
+  .input-group input {
+    min-width: 0;
+  }
+
+  /* Select specific styling */
+  .input-primary,
+ select.input-primary {
+  appearance: auto;
+  background-color: white;
+  cursor: pointer;
+}
+
+  select.input-primary {
+    background-image: none;
+    padding-right: 2rem;
+  }
+
+  select.input-primary:focus {
+    outline: 2px solid var(--primary);
+    outline-offset: 1px;
+    z-index: 20;
+  }
+
+/* Button */
   .btn-brand {
     @apply bg-brand text-white font-medium px-4 py-2 rounded-lg transition-all active:scale-95 disabled:opacity-50;
     @apply hover:bg-brand-hover hover:shadow-md;
+  }
+
+  /* Force pointer events on select */
+  .input-primary,
+  select {
+    pointer-events: auto !important;
   }
 }
 aside[data-collapsed="true"] + div {

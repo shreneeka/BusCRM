@@ -504,7 +504,7 @@ export default function LeadList({
                 <th className="px-4 py-4 font-bold whitespace-nowrap">
                   Mobile Number
                 </th>
-                <th className="px-4 py-4 font-bold whitespace-nowrap">Route</th>
+                <th className="px-4 py-4 font-bold whitespace-nowrap">From and To</th>
                 <th className="px-4 py-4 font-bold whitespace-nowrap">
                   Journey Date
                 </th>
