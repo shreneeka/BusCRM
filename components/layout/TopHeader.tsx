@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import Link from "next/link";
 
 interface TopHeaderProps {
   userEmail?: string;
@@ -38,6 +39,14 @@ export default function TopHeader({ userEmail, userRole }: TopHeaderProps) {
         <h1 className="text-2xl sm:text-3xl font-bold text-slate-800 tracking-tight">
           {getPageTitle()}
         </h1>
+      </div>
+      <div className="flex items-center gap-3">
+        <Link
+          href="/operators"
+          className="px-4 py-2.5 rounded-xl bg-[#3da9d4] text-white font-semibold text-sm hover:bg-[#2d8ac4] transition-colors shadow-sm"
+        >
+          Go to Operators
+        </Link>
       </div>
     </header>
   );

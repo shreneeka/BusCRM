@@ -1,24 +1,14 @@
-# Accounting Module Implementation TODO
+# TODO - Accounting Module Updates
 
-## Phase 1: Database Schema (SQL)
-- [ ] 01_accounting_categories.sql - Categories table
-- [ ] 02_accounting_accounts.sql - Accounts table (extend existing accounts or create new)
-- [ ] 03_accounting_entries.sql - Entries table (income + expense unified)
+## Task: Update Accounting Module Entries/Accounts/Categories to Match Enquiry Module UI
 
-## Phase 2: Server Actions (lib/actions)
-- [ ] accounting.actions.ts - All CRUD operations for accounting module
+### Plan:
 
-## Phase 3: UI Components
-- [ ] accounting/AccountingTabs.tsx - Tab main component
-- [ ] accounting/EntriesList.tsx - Entries list with filters
-- [ ] accounting/AccountsList.tsx - Accounts list with balance
-- [ ] accounting/CategoriesList.tsx - Categories list
-- [ ] accounting/EntryForm.tsx - Add income/expense modal
-- [ ] accounting/AccountForm.tsx - Add account modal
-- [ ] accounting/CategoryForm.tsx - Add category modal
+1. [IN PROGRESS] Update AccountingTabs.tsx - Add Main/Auto Closed tabs at the top
+2. [ ] Update EntriesList.tsx - Add Main/Auto Closed tab logic
+3. [ ] Add link type - Display linked ticket info in View modal
+4. [ ] UI Updates - Add border-t-4 accent styling (#3da9d4)
 
-## Phase 4: Pages
-- [ ] app/(dashboard)/accounting/page.tsx - Main accounting page
-
-## Phase 5: Sidebar Integration
-- [ ] Update sidebar to add Accounting nav item
+### Reference:
+- Enquiry module (LeadList.tsx) - Main/Auto Closed tabs
+- Tickets view page - Rich detail UI with linked views

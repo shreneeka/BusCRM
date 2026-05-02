@@ -19,6 +19,7 @@ import {
   ChevronUp,
   ChevronDown,
   DollarSign,
+  CreditCard,
 } from "lucide-react";
 import { signOut } from "@/lib/actions/auth.actions";
 import { cn } from "@/lib/utils";
@@ -37,7 +38,8 @@ const navItems = [
   { name: "Tickets", href: "/tickets", icon: Ticket },
   { name: "Customers", href: "/customers", icon: Users },
   { name: "Cities", href: "/cities", icon: MapPin },
-  { name: "Organization", href: "/organization/operators", icon: UserCog },
+{name: "Operators", href: "/operators", icon: UserCog },
+  { name: "Payments", href: "/payments", icon: CreditCard },
   { name: "Accounting", href: "/accounting", icon: DollarSign },
   { name: "Users", href: "/users", icon: UserCog, adminOnly: true },
 ];

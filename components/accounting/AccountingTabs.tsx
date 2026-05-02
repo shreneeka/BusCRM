@@ -1,7 +1,7 @@
-      "use client";
+"use client";
 
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Receipt, Building2, Tag } from "lucide-react";
 import {
   AccountingCategory,
   AccountingEntry,
@@ -12,9 +12,9 @@ import AccountsList from "./AccountsList";
 import CategoriesList from "./CategoriesList";
 
 const tabs = [
-  { key: "Entries", label: "Entries" },
-  { key: "Accounts", label: "Accounts" },
-  { key: "Categories", label: "Categories" },
+  { key: "Entries", label: "Entries", icon: Receipt },
+  { key: "Accounts", label: "Accounts", icon: Building2 },
+  { key: "Categories", label: "Categories", icon: Tag },
 ] as const;
 
 type TabKey = (typeof tabs)[number]["key"];
@@ -28,33 +28,36 @@ export default function AccountingTabs({
   initialCategories: AccountingCategory[];
   initialAccounts: AccountSummary[];
 }) {
-const [activeTab, setActiveTab] = useState<TabKey>("Entries");
+  const [activeTab, setActiveTab] = useState<TabKey>("Entries");
   const [addType, setAddType] = useState<"Income" | "Expense">("Income");
   const [isAddOpen, setIsAddOpen] = useState(false);
 
   return (
-    <div className="saas-card bg-white flex flex-col h-full border-t-4 border-t-[#3da9d4]">
-      <div className="flex items-center justify-between gap-4 px-5 pt-4 border-b border-slate-100 bg-white shrink-0">
-        <div className="flex items-center gap-6">
+    <div className="saas-card bg-white flex flex-col h-full border-t-4 border-t-[#3da9d4] overflow-hidden">
+      <div className="flex items-center justify-between gap-4 px-5 pt-4 pb-0 border-b border-slate-100 bg-white shrink-0">
+        <div className="flex items-center gap-2">
           {tabs.map((tab) => {
             const isActive = tab.key === activeTab;
+            const Icon = tab.icon;
             return (
               <button
                 key={tab.key}
                 type="button"
                 onClick={() => setActiveTab(tab.key)}
-                className={`pb-3 text-sm font-bold border-b-2 transition-colors ${
+                className={`px-4 py-2.5 rounded-xl font-medium text-sm transition-all flex items-center gap-2 ${
                   isActive
-                    ? "border-[#3da9d4] text-[#3da9d4]"
-                    : "border-transparent text-slate-500 hover:text-slate-800"
+                    ? "bg-[#3da9d4] text-white"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                 }`}
               >
+                <Icon className="w-4 h-4" />
                 {tab.label}
               </button>
             );
           })}
         </div>
-<div className="flex items-center gap-1.5">
+
+        <div className="flex items-center gap-1.5">
           {activeTab === "Entries" && (
             <>
               <button
@@ -100,11 +103,11 @@ const [activeTab, setActiveTab] = useState<TabKey>("Entries");
             >
               <Plus className="w-3 h-3" /> Add Category
             </button>
-          )}
+)}
         </div>
       </div>
 
-{activeTab === "Entries" && (
+      {activeTab === "Entries" && (
         <EntriesList
           initialEntries={initialEntries}
           accounts={initialAccounts}

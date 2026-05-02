@@ -18,6 +18,7 @@ import {
   AlertCircle,
   Plus,
   Divide,
+  X,
 } from "lucide-react";
 
 interface Operator {
@@ -251,6 +252,142 @@ function MobileNumberSelector({
                 </span>
                 <span className="text-xs text-slate-500 font-medium">
                   {customer.mobile_number}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OperatorSelector({
+  label,
+  name,
+  operators,
+  onSelect,
+  selectedOperator,
+}: {
+  label: string;
+  name: string;
+  operators: Operator[];
+  onSelect: (operatorId: string) => void;
+  selectedOperator: string;
+}) {
+  const [search, setSearch] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (selectedOperator) {
+      const op = operators.find((o) => o.id === selectedOperator);
+      if (op) {
+        setSearch(op.name);
+      }
+    } else {
+      setSearch("");
+    }
+  }, [selectedOperator, operators]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        wrapperRef.current &&
+        !wrapperRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filteredOperators = operators.filter((op) =>
+    op.name.toLowerCase().includes(search.toLowerCase()) ||
+    op.person_name?.toLowerCase().includes(search.toLowerCase()) ||
+    op.mobile_number?.includes(search)
+  );
+
+  const handleSelect = (operator: Operator) => {
+    onSelect(operator.id);
+    setSearch(operator.name);
+    setIsOpen(false);
+  };
+
+  const handleClear = () => {
+    onSelect("");
+    setSearch("");
+    setIsOpen(false);
+  };
+
+  const selectedOp = operators.find((o) => o.id === selectedOperator);
+
+  return (
+    <div ref={wrapperRef} className="relative w-full">
+      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
+        {label}
+      </label>
+      <input type="hidden" name={name} value={selectedOperator || ""} />
+      <div className="relative">
+        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <input
+          type="text"
+          className="input-primary pl-9 bg-white text-sm py-2 pr-8"
+          placeholder="Select Operator (Optional)"
+          value={search}
+          autoComplete="off"
+          onChange={(e) => {
+            setSearch(e.target.value);
+            onSelect("");
+            setIsOpen(true);
+          }}
+          onFocus={() => setIsOpen(true)}
+        />
+        {selectedOperator && (
+          <button
+            type="button"
+            onClick={handleClear}
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-slate-100 rounded-full transition-colors"
+          >
+            <X className="w-3 h-3 text-slate-400" />
+          </button>
+        )}
+      </div>
+
+      {isOpen && operators.length > 0 && (
+        <div className="absolute z-50 mt-1 w-full bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95">
+          <div className="max-h-48 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            <button
+              type="button"
+              onClick={handleClear}
+              className={`w-full text-left px-4 py-2.5 text-sm transition-colors border-b border-slate-50 ${
+                !selectedOperator
+                  ? "bg-[#3da9d4]/10 text-[#3da9d4]"
+                  : "text-slate-500 hover:bg-slate-50"
+              }`}
+            >
+              No Operator
+            </button>
+            {filteredOperators.map((operator) => (
+              <button
+                key={operator.id}
+                type="button"
+                onClick={() => handleSelect(operator)}
+                className={`w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 flex items-center justify-between ${
+                  selectedOperator === operator.id
+                    ? "bg-[#3da9d4]/10"
+                    : ""
+                }`}
+              >
+                <div>
+                  <p className="font-medium text-slate-800">{operator.name}</p>
+                  <p className="text-xs text-slate-500">
+                    {operator.person_name} • {operator.mobile_number}
+                  </p>
+                </div>
+                <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">
+                  {operator.commission_percentage}%
                 </span>
               </button>
             ))}
@@ -686,24 +823,14 @@ return (
           </div>
         </div>
 
-        {operators.length > 0 && (
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
-              Operator (Optional)
-            </label>
-            <select
-              value={selectedOperator}
-              onChange={(e) => setSelectedOperator(e.target.value)}
-              className="input-primary w-full text-sm py-2"
-            >
-              <option value="">No Operator</option>
-              {operators.map((op) => (
-                <option key={op.id} value={op.id}>
-                  {op.name} ({op.commission_percentage}%)
-                </option>
-              ))}
-            </select>
-          </div>
+{operators.length > 0 && (
+          <OperatorSelector
+            label="Operator (Optional)"
+            name="operator_id"
+            operators={operators}
+            selectedOperator={selectedOperator}
+            onSelect={setSelectedOperator}
+          />
         )}
       </div>
 

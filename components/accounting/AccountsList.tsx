@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Search, Plus, Pencil, X } from "lucide-react";
+import { useMemo, useState, useEffect } from "react";
+import { Search, Plus, Pencil, X, Building2, Wallet, CreditCard, IndianRupee, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   AccountSummary,
   createAccountingAccount,
@@ -20,10 +20,12 @@ export default function AccountsList({
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<
     "All" | "Active" | "Inactive"
-  >("All");
+>("All");
   const [editingAccount, setEditingAccount] = useState<AccountSummary | null>(
     null,
   );
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 15;
 
   const isAddOpen = externalIsAddOpen ?? false;
   const setIsAddOpen = externalSetIsAddOpen ?? (() => {});
@@ -39,7 +41,16 @@ export default function AccountsList({
         (statusFilter === "Inactive" && !account.is_active);
       return matchesSearch && matchesStatus;
     });
-  }, [initialAccounts, searchTerm, statusFilter]);
+}, [initialAccounts, searchTerm, statusFilter]);
+
+  // Reset to page 1 when search/filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter]);
+
+  const totalPages = Math.ceil(filteredAccounts.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const currentAccounts = filteredAccounts.slice(startIndex, startIndex + itemsPerPage);
 
 return (
     <div className="saas-card bg-white flex flex-col h-full">
@@ -99,8 +110,8 @@ return (
                   No accounts match the filter.
                 </td>
               </tr>
-            ) : (
-              filteredAccounts.map((account) => (
+) : (
+              currentAccounts.map((account) => (
                 <tr
                   key={account.id}
                   className="hover:bg-slate-50 transition-colors"
@@ -142,8 +153,38 @@ return (
               ))
             )}
           </tbody>
-        </table>
+</table>
       </div>
+
+      {/* Pagination Controls */}
+      {filteredAccounts.length > 0 && (
+        <div className="py-3 px-4 border-t border-slate-100 flex items-center justify-between bg-slate-50 shrink-0">
+          <span className="text-sm text-slate-500 font-medium">
+            Showing <strong className="text-slate-700">{startIndex + 1}</strong> to{" "}
+            <strong className="text-slate-700">{Math.min(startIndex + itemsPerPage, filteredAccounts.length)}</strong> of{" "}
+            <strong className="text-slate-700">{filteredAccounts.length}</strong> accounts
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="flex items-center gap-1 px-2.5 py-1 text-sm font-medium rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+            >
+              <ChevronLeft className="w-4 h-4" /> Prev
+            </button>
+            <div className="px-3 py-1 text-sm font-bold text-[#3da9d4] bg-[#3da9d4]/10 border border-[#3da9d4]/20 rounded-lg shadow-sm">
+              {currentPage} / {Math.max(1, totalPages)}
+            </div>
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages || totalPages === 0}
+              className="flex items-center gap-1 px-2.5 py-1 text-sm font-medium rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+            >
+              Next <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
 {isAddOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
@@ -162,33 +203,43 @@ return (
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <form action={createAccountingAccount} className="grid gap-2">
+<form action={createAccountingAccount} className="grid gap-2">
               <label className="input-group">
                 <span className="bg-slate-100 text-xs">Name</span>
-                <input
-                  name="name"
-                  type="text"
-                  required
-                  className="input-primary"
-                />
+                <div className="relative">
+                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    name="name"
+                    type="text"
+                    required
+                    className="input-primary pl-9"
+                    placeholder="Account name"
+                  />
+                </div>
               </label>
-              <label className="input-group">
+<label className="input-group">
                 <span className="bg-slate-100 text-xs">Type</span>
-                <select name="type" required className="input-primary">
-                  <option value="Cash">Cash</option>
-                  <option value="UPI">UPI</option>
-                </select>
+                <div className="relative">
+                  <Wallet className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <select name="type" required className="input-primary pl-9">
+                    <option value="Cash">Cash</option>
+                    <option value="UPI">UPI</option>
+                  </select>
+                </div>
               </label>
               <label className="input-group">
                 <span className="bg-slate-100 text-xs">Opening Balance</span>
-                <input
-                  name="openingBalance"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  defaultValue="0"
-                  className="input-primary"
-                />
+                <div className="relative">
+                  <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    name="openingBalance"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    defaultValue="0"
+                    className="input-primary pl-9"
+                  />
+                </div>
               </label>
               <div className="flex justify-end gap-2 pt-1">
                 <button
@@ -224,17 +275,20 @@ return (
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <form action={updateAccountingAccount} className="grid gap-2">
+<form action={updateAccountingAccount} className="grid gap-2">
               <input type="hidden" name="id" value={editingAccount.id} />
               <label className="input-group">
                 <span className="bg-slate-100 text-xs">Name</span>
-                <input
-                  name="name"
-                  type="text"
-                  defaultValue={editingAccount.name}
-                  required
-                  className="input-primary"
-                />
+                <div className="relative">
+                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    name="name"
+                    type="text"
+                    defaultValue={editingAccount.name}
+                    required
+                    className="input-primary pl-9"
+                  />
+                </div>
               </label>
               <label className="input-group flex items-center gap-3">
                 <input type="hidden" name="isActive" value="false" />
