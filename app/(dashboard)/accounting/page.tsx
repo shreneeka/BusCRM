@@ -5,7 +5,7 @@ import {
   getAccountingEntries,
   getAccountsWithBalances,
   getAccountingCategories,
-} from "@/lib/supabase/accounting";
+} from "@/lib/supabase/accounting"
 
 export const dynamic = "force-dynamic";
 
