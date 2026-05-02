@@ -37,6 +37,7 @@ const navItems = [
   { name: "Tickets", href: "/tickets", icon: Ticket },
   { name: "Customers", href: "/customers", icon: Users },
   { name: "Cities", href: "/cities", icon: MapPin },
+  { name: "Organization", href: "/organization/operators", icon: UserCog },
   { name: "Accounting", href: "/accounting", icon: DollarSign },
   { name: "Users", href: "/users", icon: UserCog, adminOnly: true },
 ];

@@ -11,6 +11,8 @@ import {
   Loader2,
   Search,
   Filter,
+  Edit,
+  Trash2,
 } from "lucide-react";
 
 interface Ticket {
@@ -129,19 +131,16 @@ const filteredTickets = tickets.filter((ticket) => {
   };
 
   return (
-    <div className="saas-card bg-white flex flex-col h-full border-t-4 border-t-[#3da9d4]">
+    <div className="bg-white flex flex-col h-full">
       {/* Header & Search Bar */}
-      <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center bg-slate-50/50 shrink-0">
+      <div className="p-5 border-b border-slate-100 flex flex-col gap-4 bg-slate-50/50 shrink-0">
         <div>
           <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
             <Bus className="w-5 h-5 text-[#3da9d4]" />
-            Ticket Bookings
+            Ticket Listings
           </h2>
-          <p className="text-xs text-slate-500 mt-1">
-            {filteredTickets.length} ticket{filteredTickets.length !== 1 ? "s" : ""} found
-          </p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+        <div className="flex flex-col sm:flex-row gap-2">
           <div className="relative flex-1 sm:flex-none sm:w-48">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
@@ -152,7 +151,7 @@ const filteredTickets = tickets.filter((ticket) => {
               className="input-primary pl-9 py-2 text-sm w-full bg-white"
             />
           </div>
-          <div className="relative w-full sm:w-40">
+          <div className="relative flex-1 sm:flex-none sm:w-40">
             <select
               value={searchType}
               onChange={(e) => setSearchType(e.target.value)}
@@ -164,7 +163,7 @@ const filteredTickets = tickets.filter((ticket) => {
               <option value="ticket">Ticket Number</option>
             </select>
           </div>
-          <div className="relative w-full sm:w-40">
+          <div className="relative flex-1 sm:flex-none sm:w-40">
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
@@ -176,8 +175,6 @@ const filteredTickets = tickets.filter((ticket) => {
               <option value="Settled">Settled</option>
             </select>
           </div>
-        </div>
-        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           <div className="relative flex-1 sm:flex-none sm:w-48">
             <input
               type="text"
@@ -235,6 +232,9 @@ const filteredTickets = tickets.filter((ticket) => {
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wide">
                   Status
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wide">
+                  Actions
                 </th>
               </tr>
             </thead>
@@ -315,46 +315,28 @@ const filteredTickets = tickets.filter((ticket) => {
       {/* Pagination & Footer Stats */}
       {filteredTickets.length > 0 && (
         <div className="p-5 border-t border-slate-100 bg-slate-50/50 shrink-0 space-y-4">
-          {/* Stats */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="text-center">
-              <p className="text-xs text-slate-600 uppercase tracking-wide mb-1">
-                Total Revenue
-              </p>
-              <p className="text-sm font-bold text-slate-800">
-                ₹
-                {filteredTickets
-                  .reduce((sum, t) => sum + t.amount, 0)
-                  .toLocaleString("en-IN")}
-              </p>
-            </div>
-            <div className="text-center">
-              <p className="text-xs text-slate-600 uppercase tracking-wide mb-1">
-                Total Seats
-              </p>
-              <p className="text-sm font-bold text-slate-800">
-                {filteredTickets.reduce((sum, t) => sum + t.total_seats, 0)}
-              </p>
-            </div>
-            <div className="text-center">
-              <p className="text-xs text-slate-600 uppercase tracking-wide mb-1">
-                Booked
-              </p>
-              <p className="text-sm font-bold text-emerald-600">
-                {filteredTickets.filter((t) => t.status === "Booked").length}
-              </p>
-            </div>
-            <div className="text-center">
-              <p className="text-xs text-slate-600 uppercase tracking-wide mb-1">
-                Cancelled
-              </p>
-              <p className="text-sm font-bold text-rose-600">
-                {filteredTickets.filter((t) => t.status === "Cancelled").length}
-              </p>
-            </div>
-          </div>
-
           {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-1.5 text-slate-600 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed rounded transition-colors"
+              >
+                <span className="text-xs">←</span>
+              </button>
+              <span className="text-xs text-slate-600">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-1.5 text-slate-600 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed rounded transition-colors"
+              >
+                <span className="text-xs">→</span>
+              </button>
+            </div>
+          )}
           {totalPages > 1 && (
             <div className="flex items-center justify-center gap-2">
               <button

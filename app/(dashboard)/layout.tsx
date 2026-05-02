@@ -30,13 +30,15 @@ export default async function DashboardLayout({
   const userName = userData?.full_name || "User";
 
   return (
-    <div className="flex h-screen w-full bg-[#f8fafc] overflow-hidden">
-      <Sidebar userRole={userRole} userName={userName} />
+    <div className="flex flex-col h-screen w-full bg-[#f8fafc] overflow-hidden">
+      <div className="flex flex-1 overflow-hidden">
+        <Sidebar userRole={userRole} userName={userName} />
 
-      <div className="flex-1 flex flex-col h-full overflow-hidden transition-all duration-300 ease-in-out ml-64 peer-data-[collapsed=true]:ml-20">
-        <main className="flex-1 overflow-hidden p-2 flex flex-col [&>*]:h-full">
-          {children}
-        </main>
+        <div className="flex-1 flex flex-col h-full overflow-hidden transition-all duration-300 ease-in-out ml-64 peer-data-[collapsed=true]:ml-20">
+          <main className="flex-1 overflow-hidden p-2 flex flex-col [&>*]:h-full">
+            {children}
+          </main>
+        </div>
       </div>
     </div>
   );

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { createTicket, getAccounts, getOperators } from "@/lib/actions/ticket.actions";
+import { createTicket, getOperators } from "@/lib/actions/ticket.actions";
 import {
   Loader2,
   MapPin,
@@ -17,15 +17,8 @@ import {
   CheckCircle2,
   AlertCircle,
   Plus,
+  Divide,
 } from "lucide-react";
-
-interface Account {
-  id: string;
-  name: string;
-  type: string;
-  balance: number;
-  is_active: boolean;
-}
 
 interface Operator {
   id: string;
@@ -42,26 +35,26 @@ interface Customer {
   mobile_number: string;
 }
 
-interface Location {
+interface City {
   id: string;
   name: string;
 }
 
-function LocationSelector({
+function CitySelector({
   label,
   name,
-  locations,
-  onAddLocation,
-  selectedLocation,
+  cities,
+  onAddCity,
+  selectedCity,
   onSelect,
   alignMenu = "left",
 }: {
   label: string;
   name: string;
-  locations: Location[];
-  onAddLocation: (name: string) => Promise<Location | null>;
-  selectedLocation: Location | null;
-  onSelect: (location: Location | null) => void;
+  cities: City[];
+  onAddCity: (name: string) => Promise<City | null>;
+  selectedCity: City | null;
+  onSelect: (city: City | null) => void;
   alignMenu?: "left" | "right";
 }) {
   const [search, setSearch] = useState("");
@@ -70,8 +63,8 @@ function LocationSelector({
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setSearch(selectedLocation ? selectedLocation.name : "");
-  }, [selectedLocation]);
+    setSearch(selectedCity ? selectedCity.name : "");
+  }, [selectedCity]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -80,32 +73,32 @@ function LocationSelector({
         !wrapperRef.current.contains(event.target as Node)
       ) {
         setIsOpen(false);
-        setSearch(selectedLocation ? selectedLocation.name : "");
+        setSearch(selectedCity ? selectedCity.name : "");
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [selectedLocation]);
+  }, [selectedCity]);
 
-  const filteredLocations = locations.filter((l) =>
-    l.name.toLowerCase().includes(search.toLowerCase()),
+  const filteredCities = cities.filter((c) =>
+    c.name.toLowerCase().includes(search.toLowerCase()),
   );
 
-  const hasExactMatch = locations.some(
-    (l) => l.name.toLowerCase() === search.trim().toLowerCase(),
+  const hasExactMatch = cities.some(
+    (c) => c.name.toLowerCase() === search.trim().toLowerCase(),
   );
 
-  const handleSelect = (location: Location) => {
-    onSelect(location);
+  const handleSelect = (city: City) => {
+    onSelect(city);
     setIsOpen(false);
   };
 
   const handleAddNew = async () => {
     if (!search.trim()) return;
     setIsAdding(true);
-    const newLocation = await onAddLocation(search.trim());
-    if (newLocation) {
-      onSelect(newLocation);
+    const newCity = await onAddCity(search.trim());
+    if (newCity) {
+      onSelect(newCity);
       setIsOpen(false);
     }
     setIsAdding(false);
@@ -116,7 +109,7 @@ function LocationSelector({
       <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
         {label} *
       </label>
-      <input type="hidden" name={name} value={selectedLocation?.id || ""} />
+      <input type="hidden" name={name} value={selectedCity?.id || ""} />
       <div className="relative">
         <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
         <input
@@ -139,14 +132,14 @@ function LocationSelector({
           className={`absolute z-50 mt-1 w-[240px] bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 ${alignMenu === "right" ? "right-0" : "left-0"}`}
         >
           <div className="max-h-48 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-            {filteredLocations.map((location) => (
+            {filteredCities.map((city) => (
               <button
-                key={location.id}
+                key={city.id}
                 type="button"
-                onClick={() => handleSelect(location)}
+                onClick={() => handleSelect(city)}
                 className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
               >
-                {location.name}
+                {city.name}
               </button>
             ))}
           </div>
@@ -268,14 +261,14 @@ function MobileNumberSelector({
   );
 }
 
-export default function TicketBookingForm() {
+export default function TicketBookingForm({ onSuccess }: { onSuccess?: () => void }) {
   const supabase = createClient();
 
   // Basic Details
   const [passengerName, setPassengerName] = useState("");
   const [mobileNumber, setMobileNumber] = useState("");
-  const [pickupLocation, setPickupLocation] = useState<Location | null>(null);
-  const [dropLocation, setDropLocation] = useState<Location | null>(null);
+  const [pickupLocation, setPickupLocation] = useState<City | null>(null);
+  const [dropLocation, setDropLocation] = useState<City | null>(null);
   const [journeyDate, setJourneyDate] = useState("");
   const [seatNumbers, setSeatNumbers] = useState("");
   const [totalSeats, setTotalSeats] = useState(1);
@@ -284,12 +277,10 @@ export default function TicketBookingForm() {
   const [travelType, setTravelType] = useState<"AC" | "Non-AC">("Non-AC");
   const [ticketNumber, setTicketNumber] = useState("");
 
-  // Locations
-  const [locations, setLocations] = useState<Location[]>([]);
+  // Cities
+  const [cities, setCities] = useState<City[]>([]);
 
   // Payment Details
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [selectedAccount, setSelectedAccount] = useState("");
   const [accountType, setAccountType] = useState<"Cash" | "UPI">("Cash");
   const [amount, setAmount] = useState("");
   const [operators, setOperators] = useState<Operator[]>([]);
@@ -310,7 +301,7 @@ export default function TicketBookingForm() {
     name
       .trim()
       .replace(/\s+/g, " ")
-      .split(" ")
+      .split(" ")                                           
       .map((part) =>
         part.length > 0
           ? `${part.charAt(0).toUpperCase()}${part.slice(1).toLowerCase()}`
@@ -346,70 +337,31 @@ export default function TicketBookingForm() {
     setPassengerName(formatPassengerName(customer.name));
   };
 
-  async function fetchLocations() {
-    try {
-      const { data, error } = await supabase
-        .from("tickets")
-        .select("pickup_location, drop_location")
-        .order("created_at", { ascending: false })
-        .limit(100);
-
-      if (!error && data) {
-        const uniqueLocations = new Map<string, Location>();
-        
-        data.forEach((ticket: any) => {
-          if (ticket.pickup_location) {
-            const key = ticket.pickup_location.toLowerCase();
-            if (!uniqueLocations.has(key)) {
-              uniqueLocations.set(key, {
-                id: ticket.pickup_location,
-                name: ticket.pickup_location,
-              });
-            }
-          }
-          if (ticket.drop_location) {
-            const key = ticket.drop_location.toLowerCase();
-            if (!uniqueLocations.has(key)) {
-              uniqueLocations.set(key, {
-                id: ticket.drop_location,
-                name: ticket.drop_location,
-              });
-            }
-          }
-        });
-
-        setLocations(Array.from(uniqueLocations.values()).sort((a, b) => a.name.localeCompare(b.name)));
-      }
-    } catch (err) {
-      console.error("Error fetching locations:", err);
-    }
+  async function fetchCities() {
+    const { data } = await supabase.from("cities").select("*").order("name");
+    if (data) setCities(data);
   }
 
-  async function handleAddLocation(locationName: string): Promise<Location | null> {
-    // Add to state immediately (locations are created on-the-fly)
-    const newLocation: Location = {
-      id: locationName,
-      name: locationName,
-    };
-    setLocations((prev) =>
-      [...prev, newLocation].sort((a, b) => a.name.localeCompare(b.name)),
-    );
-    return newLocation;
+  async function handleAddCity(cityName: string): Promise<City | null> {
+    const { data, error } = await supabase
+      .from("cities")
+      .insert([{ name: cityName }])
+      .select()
+      .single();
+    if (!error && data) {
+      setCities((prev) =>
+        [...prev, data].sort((a, b) => a.name.localeCompare(b.name)),
+      );
+      return data;
+    }
+    return null;
   }
 
   useEffect(() => {
     async function loadData() {
-      const [accountsData, operatorsData] = await Promise.all([
-        getAccounts(),
-        getOperators(),
-      ]);
-      setAccounts(accountsData);
+      const operatorsData = await getOperators();
       setOperators(operatorsData);
-      if (accountsData.length > 0) {
-        setSelectedAccount(accountsData[0].id);
-        setAccountType(accountsData[0].type === "Cash" ? "Cash" : "UPI");
-      }
-      await fetchLocations();
+      await fetchCities();
     }
     loadData();
   }, []);
@@ -429,7 +381,6 @@ export default function TicketBookingForm() {
     if (!pickupTime) newErrors.push("Pickup time is required");
     if (!travelType) newErrors.push("Travel type is required");
     if (!ticketNumber.trim()) newErrors.push("Ticket number is required");
-    if (!selectedAccount) newErrors.push("Account is required");
     if (!amount || parseFloat(amount) <= 0)
       newErrors.push("Valid amount is required");
 
@@ -465,7 +416,6 @@ export default function TicketBookingForm() {
         bus_number: busNumber || undefined,
         travel_type: travelType,
         ticket_number: ticketNumber,
-        account_id: selectedAccount,
         account_type: accountType,
         amount: parseFloat(amount),
         operator_id: selectedOperator || undefined,
@@ -488,7 +438,10 @@ export default function TicketBookingForm() {
       setErrors([]);
 
       setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 3000);
+      setTimeout(() => {
+        setShowSuccess(false);
+        onSuccess?.();
+      }, 2000);
     } catch (error) {
       console.error(error);
       setErrors(["Failed to create ticket. Please try again."]);
@@ -498,263 +451,244 @@ export default function TicketBookingForm() {
   }
 
 return (
-    <div className="saas-card bg-white p-5 flex flex-col border-t-4 border-t-[#3da9d4] shadow-sm relative overflow-hidden h-fit max-h-full">
-      <div className="mb-4 shrink-0">
-        <h2 className="text-lg font-bold text-slate-800">New Ticket</h2>
-        <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold">
-          Log a new bus ticket booking
-        </p>
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      {errors.length > 0 && (
+        <div className="rounded-lg border border-rose-100 bg-rose-50 p-3 text-sm text-rose-700">
+          <strong className="block font-semibold mb-1">Please fix the following:</strong>
+          <ul className="list-disc list-inside space-y-1">
+            {errors.map((error) => (
+              <li key={error}>{error}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {showSuccess && (
+        <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3 text-sm text-emerald-700">
+          ✓ Ticket booked successfully.
+        </div>
+      )}
+
+      {/* Customer Details - 2 columns */}
+      <div className="grid grid-cols-2 gap-3">
+        <MobileNumberSelector
+          label="Mobile Number"
+          mobileNumber={mobileNumber}
+          onMobileChange={(num) => {
+            setMobileNumber(num);
+            fetchCustomerSuggestions(num);
+          }}
+          onCustomerSelect={handleCustomerSelect}
+          customers={customerSuggestions}
+          formatPassengerName={formatPassengerName}
+        />
+
+        <div>
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
+            Passenger Name *
+          </label>
+          <div className="relative">
+            <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              required
+              type="text"
+              value={passengerName}
+              onChange={(e) => setPassengerName(e.target.value)}
+              className="input-primary pl-10 w-full text-sm py-2"
+              placeholder="Full Name"
+            />
+          </div>
+        </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="flex flex-col min-h-0">
-        <div className="flex flex-col gap-5 overflow-y-auto pr-1">
-          {/* Customer Details */}
-          <div className="space-y-4">
-            <MobileNumberSelector
-              label="Mobile Number"
-              mobileNumber={mobileNumber}
-              onMobileChange={(num) => {
-                setMobileNumber(num);
-                fetchCustomerSuggestions(num);
-              }}
-              onCustomerSelect={handleCustomerSelect}
-              customers={customerSuggestions}
-              formatPassengerName={formatPassengerName}
+      {/* Route Details - 2 columns */}
+      <div className="grid grid-cols-2 gap-3">
+        <CitySelector
+          label="From"
+          name="pickup_location_id"
+          cities={cities}
+          onAddCity={handleAddCity}
+          selectedCity={pickupLocation}
+          onSelect={setPickupLocation}
+          alignMenu="left"
+        />
+        <CitySelector
+          label="To"
+          name="drop_location_id"
+          cities={cities}
+          onAddCity={handleAddCity}
+          selectedCity={dropLocation}
+          onSelect={setDropLocation}
+          alignMenu="right"
+        />
+      </div>
+
+      {/* Date & Time - 2 columns */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
+            Journey Date *
+          </label>
+          <div className="relative">
+            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+            <input
+              required
+              type="date"
+              value={journeyDate}
+              onChange={(e) => setJourneyDate(e.target.value)}
+              min={todayStr}
+              className="input-primary pl-8 w-full text-sm py-2"
             />
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
-                Passenger Name *
-              </label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
-                  required
-                  type="text"
-                  value={passengerName}
-                  onChange={(e) => setPassengerName(e.target.value)}
-                  className="input-primary pl-10 w-full text-sm py-2.5"
-                  placeholder="Full Name"
-                />
-              </div>
-            </div>
           </div>
+        </div>
 
-          <div className="h-px bg-slate-100 my-1 shrink-0" />
-
-          {/* Route Details */}
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <LocationSelector
-                label="From"
-                name="pickup_location_id"
-                locations={locations}
-                onAddLocation={handleAddLocation}
-                selectedLocation={pickupLocation}
-                onSelect={setPickupLocation}
-                alignMenu="left"
-              />
-              <LocationSelector
-                label="To"
-                name="drop_location_id"
-                locations={locations}
-                onAddLocation={handleAddLocation}
-                selectedLocation={dropLocation}
-                onSelect={setDropLocation}
-                alignMenu="right"
-              />
-            </div>
+        <div>
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
+            Pickup Time *
+          </label>
+          <div className="relative">
+            <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+            <input
+              required
+              type="time"
+              value={pickupTime}
+              onChange={(e) => setPickupTime(e.target.value)}
+              className="input-primary pl-8 w-full text-sm py-2"
+            />
           </div>
+        </div>
+      </div>
 
-          {/* Journey Date */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
-              Journey Date *
-            </label>
-            <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
-              <input
-                required
-                type="date"
-                value={journeyDate}
-                onChange={(e) => setJourneyDate(e.target.value)}
-                min={todayStr}
-                className="input-primary pl-8 w-full text-sm py-2"
-              />
-            </div>
+      {/* Seat Details - 2 columns */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
+            Seat Numbers *
+          </label>
+          <div className="relative">
+            <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+            <input
+              required
+              type="text"
+              value={seatNumbers}
+              onChange={(e) => setSeatNumbers(e.target.value)}
+              className="input-primary pl-8 w-full text-sm py-2"
+              placeholder="A1, A2, B1"
+            />
           </div>
+        </div>
 
-          {/* Pickup Time */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
-              Pickup Time *
-            </label>
-            <div className="relative">
-              <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
-              <input
-                required
-                type="time"
-                value={pickupTime}
-                onChange={(e) => setPickupTime(e.target.value)}
-                className="input-primary pl-8 w-full text-sm py-2"
-              />
-            </div>
+        <div>
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
+            Total Seats *
+          </label>
+          <input
+            required
+            type="number"
+            value={totalSeats}
+            onChange={(e) => setTotalSeats(Math.max(1, Math.min(70, parseInt(e.target.value) || 1)))}
+            min={1}
+            max={70}
+            className="input-primary w-full text-sm py-2"
+          />
+        </div>
+      </div>
+
+      {/* Bus Details - 2 columns */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
+            Bus Number
+          </label>
+          <div className="relative">
+            <Bus className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+            <input
+              type="text"
+              value={busNumber}
+              onChange={(e) => setBusNumber(e.target.value)}
+              className="input-primary pl-8 w-full text-sm py-2"
+              placeholder="DL-01-AB-1234"
+            />
           </div>
+        </div>
 
-          {/* Seat Numbers */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
-              Seat Numbers *
-            </label>
-            <div className="relative">
-              <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
-              <input
-                required
-                type="text"
-                value={seatNumbers}
-                onChange={(e) => setSeatNumbers(e.target.value)}
-                className="input-primary pl-8 w-full text-sm py-2"
-                placeholder="A1, A2, B1"
-              />
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5">comma-separated</p>
+        <div>
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
+            Travel Type *
+          </label>
+          <select
+            required
+            value={travelType}
+            onChange={(e) => setTravelType(e.target.value as "AC" | "Non-AC")}
+            className="input-primary w-full text-sm py-2"
+          >
+            <option value="Non-AC">Non-AC</option>
+            <option value="AC">AC</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Ticket & Payment - 2 columns */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
+            Ticket Number *
+          </label>
+          <div className="relative">
+            <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+            <input
+              required
+              type="text"
+              value={ticketNumber}
+              onChange={(e) => setTicketNumber(e.target.value)}
+              className="input-primary pl-8 w-full text-sm py-2"
+              placeholder="TKT-001"
+            />
           </div>
+        </div>
 
-          {/* Total Seats */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
-              Total Seats *
-            </label>
+        <div>
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
+            Payment Type *
+          </label>
+          <select
+            required
+            value={accountType}
+            onChange={(e) => setAccountType(e.target.value as "Cash" | "UPI")}
+            className="input-primary w-full text-sm py-2"
+          >
+            <option value="Cash">Cash</option>
+            <option value="UPI">UPI</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Amount & Operator - 2 columns */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
+            Amount (₹) *
+          </label>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
+              ₹
+            </span>
             <input
               required
               type="number"
-              value={totalSeats}
-              onChange={(e) => setTotalSeats(Math.max(1, Math.min(70, parseInt(e.target.value) || 1)))}
-              min={1}
-              max={70}
-              className="input-primary w-full text-sm py-2"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              min={0}
+              step={0.01}
+              className="input-primary pl-8 w-full text-sm py-2"
+              placeholder="0.00"
             />
           </div>
+        </div>
 
-          {/* Bus Number */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
-              Bus Number
-            </label>
-            <div className="relative">
-              <Bus className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
-              <input
-                type="text"
-                value={busNumber}
-                onChange={(e) => setBusNumber(e.target.value)}
-                className="input-primary pl-8 w-full text-sm py-2"
-                placeholder="DL-01-AB-1234"
-              />
-            </div>
-          </div>
-
-          {/* Travel Type */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
-              Travel Type *
-            </label>
-            <select
-              required
-              value={travelType}
-              onChange={(e) => setTravelType(e.target.value as "AC" | "Non-AC")}
-              className="input-primary w-full text-sm py-2"
-            >
-              <option value="Non-AC">Non-AC</option>
-              <option value="AC">AC</option>
-            </select>
-          </div>
-
-          {/* Ticket Number */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
-              Ticket Number *
-            </label>
-            <div className="relative">
-              <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
-              <input
-                required
-                type="text"
-                value={ticketNumber}
-                onChange={(e) => setTicketNumber(e.target.value)}
-                className="input-primary pl-8 w-full text-sm py-2"
-                placeholder="TKT-001"
-              />
-            </div>
-          </div>
-
-          {/* Account */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
-              Account *
-            </label>
-            <select
-              required
-              value={selectedAccount}
-              onChange={(e) => {
-                setSelectedAccount(e.target.value);
-                const account = accounts.find((a) => a.id === e.target.value);
-                if (account) {
-                  setAccountType(account.type === "Cash" ? "Cash" : "UPI");
-                }
-              }}
-              className="input-primary w-full text-sm py-2"
-            >
-              <option value="">Select Account</option>
-              {accounts.map((acc) => (
-                <option key={acc.id} value={acc.id}>
-                  {acc.name} ({acc.type})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Payment Type */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
-              Payment Type *
-            </label>
-            <select
-              required
-              value={accountType}
-              onChange={(e) => setAccountType(e.target.value as "Cash" | "UPI")}
-              className="input-primary w-full text-sm py-2"
-            >
-              <option value="Cash">Cash</option>
-              <option value="UPI">UPI</option>
-            </select>
-          </div>
-
-          {/* Amount */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
-              Amount (₹) *
-            </label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
-                ₹
-              </span>
-              <input
-                required
-                type="number"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                min={0}
-                step={0.01}
-                className="input-primary pl-8 w-full text-sm py-2"
-                placeholder="0.00"
-              />
-            </div>
-          </div>
-
-        {/* Operator (Optional) */}
         {operators.length > 0 && (
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
               Operator (Optional)
             </label>
             <select
@@ -771,12 +705,14 @@ return (
             </select>
           </div>
         )}
+      </div>
 
-        {/* Submit Button */}
+      {/* Submit Buttons */}
+      <div className="flex gap-2 pt-2">
         <button
           type="submit"
           disabled={isSubmitting}
-          className="w-full bg-[#3da9d4] hover:bg-[#2882a8] text-white font-semibold py-2.5 px-3 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm mt-4"
+          className="flex-1 bg-[#3da9d4] hover:bg-[#2882a8] text-white font-semibold py-2 px-3 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
         >
           {isSubmitting ? (
             <>
@@ -785,13 +721,12 @@ return (
             </>
           ) : (
             <>
-              <CheckCircle2 className="w-4 h-4" />
-              Book Ticket
+              <Plus className="w-4 h-4" />
+              Add Ticket
             </>
           )}
         </button>
       </div>
     </form>
-    </div>
   );
 }
