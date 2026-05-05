@@ -1,9 +1,22 @@
 "use client";
 
-import { Eye, Phone, User, Building2, DollarSign, Ticket, Calendar, CheckCircle2, Clock, ArrowLeft, Edit2 } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Building2, DollarSign, ArrowLeft, Plus, CreditCard, TrendingUp, AlertCircle, X } from "lucide-react";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
 import OperatorSettlementsView from "./OperatorSettlementsView";
+import BookingsTable from "./BookingsTable";
 
+interface OperatorDetails {
+  totalTickets: number;
+  activeRoutes: number;
+  totalCities: number;
+  averageTicketValue: number;
+  lastActiveDate: string;
+  email?: string;
+  address?: string;
+  website?: string;
+}
 
 interface Statistics {
   totalTickets: number;
@@ -25,12 +38,29 @@ interface OperatorSummary {
     name: string;
     person_name: string;
     mobile_number: string;
+    email?: string;
+    address?: string;
+    website?: string;
     commission_percentage: number;
     is_active: boolean;
     created_at: string;
     updated_at?: string;
   };
   statistics: Statistics;
+  details?: OperatorDetails;
+}
+
+interface Booking {
+  id: string;
+  passenger_name: string;
+  pickup_city: string;
+  drop_city: string;
+  journey_date: string;
+  booking_account: string;
+  amount: number;
+  paid_amount?: number;
+  payment_status?: 'paid' | 'partial' | 'not_paid';
+  status: 'settled' | 'unsettled';
 }
 
 interface Props {
@@ -39,142 +69,441 @@ interface Props {
 
 export default function OperatorView({ operatorSummary }: Props) {
   const { operator, statistics } = operatorSummary;
-  const { totalTickets, bookedAmount, settledAmount, totalCommission, pendingSettlements, commissionPercentage } = statistics;
+  const { settledAmount } = statistics;
+  const [showSettlementForm, setShowSettlementForm] = useState(false);
+  const [settlementData, setSettlementData] = useState({
+    paid_amount: '',
+    payment_date: new Date().toISOString().split('T')[0],
+    payment_method: 'cash',
+    notes: '',
+    reference_number: '',
+    bank_name: '',
+    account_number: '',
+    payment_collector_name: '',
+    payment_collector_mobile: ''
+  });
+  const [activeTab, setActiveTab] = useState<'bookings' | 'settlements'>('bookings');
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [loadingBookings, setLoadingBookings] = useState(false);
 
+  // Calculate actual unsettled amount from bookings
+  const calculateUnsettledAmount = useCallback(() => {
+    const totalBooked = bookings.reduce((sum, booking) => sum + booking.amount, 0);
+    const totalPaid = bookings.reduce((sum, booking) => sum + (booking.paid_amount || 0), 0);
+    return totalBooked - totalPaid;
+  }, [bookings]);
+
+  const actualUnsettledAmount = calculateUnsettledAmount();
+  const supabase = createClient();
+
+  const fetchBookings = useCallback(async () => {
+    setLoadingBookings(true);
+    try {
+      const { data, error } = await supabase
+        .from('tickets')
+        .select('*')
+        .eq('operator_id', operator.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      
+      if (error) throw error;
+      
+      const formattedBookings: Booking[] = (data || []).map(ticket => {
+        const paidAmount = ticket.payment_status === 'paid' ? ticket.amount : 
+                          ticket.payment_status === 'partial' ? (ticket.partial_amount || 0) : 0;
+        
+        return {
+          id: ticket.id,
+          passenger_name: ticket.passenger_name || 'N/A',
+          pickup_city: ticket.pickup_city,
+          drop_city: ticket.drop_city,
+          journey_date: ticket.journey_date,
+          booking_account: ticket.booking_reference || `BK-${ticket.id.slice(-8)}`,
+          amount: ticket.amount || 0,
+          paid_amount: paidAmount,
+          payment_status: ticket.payment_status || 'not_paid',
+          status: ticket.is_settled ? 'settled' : 'unsettled'
+        };
+      });
+      
+      setBookings(formattedBookings);
+    } catch (error) {
+      console.error('Error fetching bookings:', error);
+    } finally {
+      setLoadingBookings(false);
+    }
+  }, [operator.id, supabase]);
+
+  useEffect(() => {
+    fetchBookings();
+  }, [fetchBookings]);
+
+  // Update settlement data with actual unsettled amount when bookings change
+  useEffect(() => {
+    const unsettledAmount = calculateUnsettledAmount();
+    if (unsettledAmount > 0) {
+      setSettlementData(prev => ({
+        ...prev,
+        paid_amount: unsettledAmount.toString()
+      }));
+    }
+  }, [bookings, calculateUnsettledAmount]);
+
+  const handleSettlementSubmit = async () => {
+    try {
+      const settlementPayload: Record<string, string | number | boolean> = {
+        operator_name: operator.name,
+        mobile_number: operator.mobile_number,
+        total_amount: actualUnsettledAmount,
+        commission_percentage: operator.commission_percentage,
+        commission_amount: actualUnsettledAmount * (operator.commission_percentage / 100),
+        operator_payable: actualUnsettledAmount - (actualUnsettledAmount * (operator.commission_percentage / 100)),
+        paid_amount: parseFloat(settlementData.paid_amount),
+        is_paid: true,
+        paid_at: new Date().toISOString(),
+        payment_status: 'done',
+        settlement_method: settlementData.payment_method,
+        notes: settlementData.notes,
+        created_at: new Date().toISOString()
+      };
+      
+      // Add optional fields if they exist
+      if (settlementData.reference_number) {
+        settlementPayload.reference_number = settlementData.reference_number;
+      }
+      if (settlementData.bank_name) {
+        settlementPayload.bank_name = settlementData.bank_name;
+      }
+      if (settlementData.account_number) {
+        settlementPayload.account_number = settlementData.account_number;
+      }
+      if (settlementData.payment_collector_name) {
+        settlementPayload.payment_collector_name = settlementData.payment_collector_name;
+        settlementPayload.payment_collected_at = new Date().toISOString();
+      }
+      if (settlementData.payment_collector_mobile) {
+        settlementPayload.payment_collector_mobile = settlementData.payment_collector_mobile;
+      }
+
+      const { error } = await supabase
+        .from('operator_settlements')
+        .insert(settlementPayload);
+
+      if (error) throw error;
+
+      // Reset form
+      setSettlementData({
+        paid_amount: '',
+        payment_date: new Date().toISOString().split('T')[0],
+        payment_method: 'cash',
+        notes: '',
+        reference_number: '',
+        bank_name: '',
+        account_number: '',
+        payment_collector_name: '',
+        payment_collector_mobile: ''
+      });
+      setShowSettlementForm(false);
+      
+      // Refresh data
+      fetchBookings();
+      window.location.reload();
+    } catch (error) {
+      console.error('Error creating settlement:', error);
+    }
+  };
+
+  
   return (
-    <div className="p-6 space-y-6">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="flex items-start justify-between">
-        <div className="flex items-start space-x-4">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#3da9d4] to-blue-600 flex items-center justify-center text-white font-bold text-xl flex-shrink-0">
-            {operator.name.charAt(0).toUpperCase()}
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold text-slate-900 mb-1">{operator.name}</h1>
-            <p className="text-lg text-slate-600 flex items-center gap-2">
-              <User className="w-5 h-5" />
-              {operator.person_name || "No contact person"}
-            </p>
-            <span className={`inline-flex px-3 py-1 mt-2 text-sm font-semibold rounded-full ${
-              operator.is_active 
-                ? "bg-emerald-100 text-emerald-800" 
-                : "bg-slate-100 text-slate-600"
-            }`}>
-              {operator.is_active ? "Active" : "Inactive"}
-            </span>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <Link href={`/operators/${operator.id}/edit`} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl transition-colors shadow-sm">
-            <Edit2 className="w-4 h-4" />
-            Edit
-          </Link>
-          <Link 
-            href="/operators" 
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-slate-900 text-white hover:bg-slate-800 rounded-xl transition-colors shadow-sm"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to List
-          </Link>
-        </div>
-      </div>
-
-      {/* Basic Info Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-          <div className="flex items-center gap-3 mb-4">
-            <Phone className="w-5 h-5 text-slate-400" />
-            <h3 className="font-semibold text-slate-900">Contact</h3>
-          </div>
-          <p className="text-2xl font-bold text-slate-900">{operator.mobile_number || "N/A"}</p>
-        </div>
-        <div className="bg-gradient-to-r from-emerald-50 to-emerald-100 p-6 rounded-2xl border border-emerald-200 shadow-sm">
-          <div className="flex items-center gap-3 mb-4">
-            <DollarSign className="w-5 h-5 text-emerald-600" />
-            <h3 className="font-semibold text-slate-900">Commission Rate</h3>
-          </div>
-          <p className="text-3xl font-bold text-emerald-700">{commissionPercentage}%</p>
-        </div>
-        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-          <div className="flex items-center gap-3 mb-4">
-            <Calendar className="w-5 h-5 text-slate-400" />
-            <h3 className="font-semibold text-slate-900">Created</h3>
-          </div>
-          <p className="text-lg text-slate-900 font-medium">
-            {new Date(operator.created_at).toLocaleDateString("en-IN", {
-              weekday: "long",
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
-          </p>
-          {operator.updated_at && (
-            <p className="text-sm text-slate-500 mt-1">
-              Updated: {new Date(operator.updated_at).toLocaleDateString("en-IN")}
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* Stats Cards */}
-      <div>
-        <h2 className="text-2xl font-bold text-slate-900 mb-6 flex items-center gap-3">
-          <Ticket className="w-7 h-7" />
-          Performance Summary
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm group hover:shadow-lg transition-all">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center group-hover:rotate-6 transition-transform">
-                <Ticket className="w-6 h-6 text-blue-600" />
-              </div>
+      <div className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-4">
+              <Link
+                href="/operators"
+                className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5" />
+                Back to Operators
+              </Link>
+              <div className="h-6 w-px bg-gray-300" />
               <div>
-                <p className="text-sm text-slate-500 uppercase tracking-wider font-medium">Total Tickets</p>
-                <p className="text-2xl font-bold text-slate-900">{totalTickets}</p>
+                <h1 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+                  <Building2 className="w-5 h-5" />
+                  {operator.name}
+                </h1>
+                <p className="text-sm text-gray-500">
+                  Business Overview
+                </p>
               </div>
             </div>
-          </div>
-          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm group hover:shadow-lg transition-all">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-12 h-12 bg-emerald-100 rounded-2xl flex items-center justify-center group-hover:rotate-6 transition-transform">
-                <CheckCircle2 className="w-6 h-6 text-emerald-600" />
-              </div>
-              <div>
-                <p className="text-sm text-slate-500 uppercase tracking-wider font-medium">Booked Amount</p>
-                <p className="text-2xl font-bold text-slate-900">₹{bookedAmount.toLocaleString()}</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm group hover:shadow-lg transition-all">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-12 h-12 bg-orange-100 rounded-2xl flex items-center justify-center group-hover:rotate-6 transition-transform">
-                <Clock className="w-6 h-6 text-orange-600" />
-              </div>
-              <div>
-                <p className="text-sm text-slate-500 uppercase tracking-wider font-medium">Pending Settlements</p>
-                <p className="text-2xl font-bold text-slate-900">{pendingSettlements}</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-gradient-to-r from-purple-50 to-indigo-100 p-6 rounded-2xl border border-purple-200 shadow-sm group hover:shadow-lg transition-all">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-12 h-12 bg-purple-100 rounded-2xl flex items-center justify-center group-hover:rotate-6 transition-transform">
-                <DollarSign className="w-6 h-6 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-sm text-slate-500 uppercase tracking-wider font-medium">Total Commission</p>
-                <p className="text-2xl font-bold text-purple-700">₹{totalCommission.toLocaleString()}</p>
-              </div>
+            
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowSettlementForm(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+              >
+                <Plus className="w-4 h-4" />
+                Add Settlement
+              </button>
+              <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${
+                operator.is_active
+                  ? "bg-emerald-100 text-emerald-800"
+                  : "bg-slate-100 text-slate-600"
+              }`}>
+                {operator.is_active ? "Active" : "Inactive"}
+              </span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Settlements Section */}
-      <OperatorSettlementsView 
-        operatorId={operator.id} 
-        operatorName={operator.name} 
-      />
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Business Overview Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-purple-100 rounded-lg">
+                <TrendingUp className="w-5 h-5 text-purple-600" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Commission</p>
+                <p className="text-xl font-bold text-purple-700">{operator.commission_percentage}%</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <CreditCard className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Settlements</p>
+                <p className="text-xl font-bold text-blue-700">{statistics.paidSettlements || 0}</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-green-100 rounded-lg">
+                <DollarSign className="w-5 h-5 text-green-600" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Total Paid</p>
+                <p className="text-xl font-bold text-green-700">₹{settledAmount.toLocaleString()}</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-orange-100 rounded-lg">
+                <AlertCircle className="w-5 h-5 text-orange-600" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Unsettled Amount</p>
+                <p className="text-xl font-bold text-orange-700">₹{actualUnsettledAmount.toLocaleString()}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+
+        {/* Tabs */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+          {/* Tab Headers */}
+          <div className="border-b border-gray-200">
+            <div className="flex">
+              <button
+                onClick={() => setActiveTab('bookings')}
+                className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors ${
+                  activeTab === 'bookings'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                All Bookings
+              </button>
+              <button
+                onClick={() => setActiveTab('settlements')}
+                className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors ${
+                  activeTab === 'settlements'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Settlement History
+              </button>
+            </div>
+          </div>
+
+          {/* Tab Content */}
+          <div className="p-6">
+            {activeTab === 'bookings' ? (
+              <BookingsTable bookings={bookings} loading={loadingBookings} />
+            ) : (
+              <OperatorSettlementsView 
+                operatorId={operator.id} 
+                operatorName={operator.name} 
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Settlement Form Modal */}
+        {showSettlementForm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg shadow-lg w-full max-w-md">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900">Add Settlement</h2>
+                    <p className="text-sm text-gray-600">Process payment for {operator.name}</p>
+                  </div>
+                  <button
+                    onClick={() => setShowSettlementForm(false)}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                
+                <div className="space-y-4">
+                  {/* Payment Details */}
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-900 mb-3">Payment Details</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Paid Amount
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
+                          <input
+                            type="number"
+                            value={settlementData.paid_amount}
+                            readOnly
+                            className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-md bg-gray-50 text-gray-700 cursor-not-allowed"
+                            placeholder="0.00"
+                          />
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">Auto-filled with remaining unpaid amount</p>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Payment Date
+                          </label>
+                          <input
+                            type="date"
+                            value={settlementData.payment_date}
+                            onChange={(e) => setSettlementData({...settlementData, payment_date: e.target.value})}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Payment Method
+                          </label>
+                          <select
+                            value={settlementData.payment_method}
+                            onChange={(e) => setSettlementData({...settlementData, payment_method: e.target.value})}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          >
+                            <option value="cash">Cash</option>
+                            <option value="bank_transfer">Bank Transfer</option>
+                            <option value="upi">UPI</option>
+                            <option value="cheque">Cheque</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Payment Collector Details */}
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-900 mb-3">Payment Collector Details</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Collector Name
+                        </label>
+                        <input
+                          type="text"
+                          value={settlementData.payment_collector_name}
+                          onChange={(e) => setSettlementData({...settlementData, payment_collector_name: e.target.value})}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="Enter name"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Collector Mobile
+                        </label>
+                        <input
+                          type="text"
+                          value={settlementData.payment_collector_mobile}
+                          onChange={(e) => setSettlementData({...settlementData, payment_collector_mobile: e.target.value})}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="Enter mobile"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Notes */}
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-900 mb-3">Notes (Optional)</h3>
+                    <textarea
+                      value={settlementData.notes}
+                      onChange={(e) => setSettlementData({...settlementData, notes: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      rows={3}
+                      placeholder="Add any additional notes..."
+                    />
+                  </div>
+                </div>
+                
+                <div className="flex gap-3 mt-6">
+                  <button
+                    onClick={() => setShowSettlementForm(false)}
+                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSettlementSubmit}
+                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                  >
+                    Add Settlement
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Settlements Section - Hidden as it's now in tabs */}
+        {/* <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+              <CreditCard className="w-5 h-5" />
+              Settlement History
+            </h2>
+          </div>
+          <OperatorSettlementsView 
+            operatorId={operator.id} 
+            operatorName={operator.name} 
+          />
+        </div> */}
+      </div>
     </div>
   );
 }

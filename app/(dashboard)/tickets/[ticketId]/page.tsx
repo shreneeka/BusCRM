@@ -24,6 +24,14 @@ interface Ticket {
   amount: number;
   status: string;
   created_at: string;
+  operator_settlements?: Array<{
+    id: string;
+    payment_status: string;
+    paid_amount: number;
+    remaining_amount: number;
+    operator_payable: number;
+    commission_percentage: number;
+  }>;
 }
 
 interface City {
@@ -44,7 +52,17 @@ export default function TicketDetailPage() {
       try {
         const { data, error } = await supabase
           .from("tickets")
-          .select("*")
+          .select(`
+            *,
+            operator_settlements (
+              id,
+              payment_status,
+              paid_amount,
+              remaining_amount,
+              operator_payable,
+              commission_percentage
+            )
+          `)
           .eq("id", params.ticketId)
           .single();
 
@@ -274,8 +292,26 @@ export default function TicketDetailPage() {
             </h2>
             <div className="space-y-2">
               <div>
-                <p className="text-xs text-emerald-600">Total Amount</p>
-                <p className="text-xl font-bold text-emerald-900">₹{ticket.amount.toLocaleString("en-IN")}</p>
+                <p className="text-xs text-emerald-600">
+                  {ticket.operator_settlements && ticket.operator_settlements.length > 0 ? (
+                    ticket.operator_settlements[0].payment_status === 'partial' ? 'Paid Amount' :
+                    ticket.operator_settlements[0].payment_status === 'done' ? 'Paid Amount' :
+                    'Total Amount'
+                  ) : 'Total Amount'}
+                </p>
+                <p className="text-xl font-bold text-emerald-900">
+                  {ticket.operator_settlements && ticket.operator_settlements.length > 0 ? (
+                    ticket.operator_settlements[0].payment_status === 'partial' ? (
+                      `₹${((ticket.operator_settlements[0].operator_payable || 0) - (ticket.operator_settlements[0].remaining_amount || 0)).toLocaleString("en-IN")}`
+                    ) : ticket.operator_settlements[0].payment_status === 'done' ? (
+                      `₹${(ticket.operator_settlements[0].operator_payable || 0).toLocaleString("en-IN")}`
+                    ) : (
+                      `₹${ticket.amount.toLocaleString("en-IN")}`
+                    )
+                  ) : (
+                    `₹${ticket.amount.toLocaleString("en-IN")}`
+                  )}
+                </p>
               </div>
               <div>
                 <p className="text-xs text-emerald-600">Payment Type</p>

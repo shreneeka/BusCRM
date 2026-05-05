@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   CreditCard,
-  DollarSign,
   CheckCircle2,
   AlertCircle,
   Loader2,
@@ -54,7 +53,7 @@ export default function OperatorSettlementsView({ operatorId, operatorName }: Pr
   const [showDetails, setShowDetails] = useState(false);
   const [selectedSettlement, setSelectedSettlement] = useState<OperatorSettlement | null>(null);
 
-  const fetchSettlements = async () => {
+  const fetchSettlements = useCallback(async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -76,11 +75,11 @@ export default function OperatorSettlementsView({ operatorId, operatorName }: Pr
     } finally {
       setLoading(false);
     }
-  };
+  }, [supabase, operatorName]);
 
   useEffect(() => {
     fetchSettlements();
-  }, [operatorId]);
+  }, [operatorId, fetchSettlements]);
 
   const filteredSettlements = settlements.filter((settlement) => {
     const matchesSearch = 
@@ -334,73 +333,24 @@ export default function OperatorSettlementsView({ operatorId, operatorName }: Pr
     );
   };
 
-  // Calculate totals
-  const totals = settlements.reduce(
-    (acc, settlement) => {
-      acc.totalAmount += settlement.total_amount;
-      acc.totalCommission += settlement.commission_amount;
-      acc.totalOperatorPayable += settlement.operator_payable;
-      acc.paidSettlements += settlement.is_paid ? 1 : 0;
-      return acc;
-    },
-    { 
-      totalAmount: 0, 
-      totalCommission: 0, 
-      totalOperatorPayable: 0,
-      paidSettlements: 0
-    }
-  );
-
   return (
     <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-      <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-          <CreditCard className="w-5 h-5" />
-          Settlement History
-        </h3>
-        <button
-          onClick={fetchSettlements}
-          className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-colors"
-          title="Refresh"
-        >
-          <Filter className="w-4 h-4" />
-        </button>
-      </div>
+      {/* Header with Search and Filter */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold text-gray-900">Settlement History</h2>
+          <button
+            onClick={fetchSettlements}
+            className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors"
+            title="Refresh"
+          >
+            <Filter className="w-4 h-4" />
+            Refresh
+          </button>
+        </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-blue-50 p-4 rounded-lg">
-          <div className="flex items-center gap-2 mb-2">
-            <CreditCard className="w-4 h-4 text-blue-600" />
-            <span className="text-sm font-medium text-blue-900">Total Settlements</span>
-          </div>
-          <p className="text-2xl font-bold text-blue-900">{settlements.length}</p>
-        </div>
-        <div className="bg-green-50 p-4 rounded-lg">
-          <div className="flex items-center gap-2 mb-2">
-            <DollarSign className="w-4 h-4 text-green-600" />
-            <span className="text-sm font-medium text-green-900">Total Amount</span>
-          </div>
-          <p className="text-2xl font-bold text-green-900">{formatCurrency(totals.totalAmount)}</p>
-        </div>
-        <div className="bg-purple-50 p-4 rounded-lg">
-          <div className="flex items-center gap-2 mb-2">
-            <DollarSign className="w-4 h-4 text-purple-600" />
-            <span className="text-sm font-medium text-purple-900">Commission Earned</span>
-          </div>
-          <p className="text-2xl font-bold text-purple-900">{formatCurrency(totals.totalCommission)}</p>
-        </div>
-        <div className="bg-emerald-50 p-4 rounded-lg">
-          <div className="flex items-center gap-2 mb-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            <span className="text-sm font-medium text-emerald-900">Paid Settlements</span>
-          </div>
-          <p className="text-2xl font-bold text-emerald-900">{totals.paidSettlements}</p>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="flex gap-4 mb-6">
+        {/* Search and Filter Section */}
+        <div className="flex gap-3">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
           <input
@@ -422,6 +372,7 @@ export default function OperatorSettlementsView({ operatorId, operatorName }: Pr
           <option value="partial">Partial Paid</option>
           <option value="unpaid">Unpaid</option>
         </select>
+        </div>
       </div>
 
       {/* Settlements Table */}

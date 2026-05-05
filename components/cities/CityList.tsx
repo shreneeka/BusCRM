@@ -14,6 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import Link from "next/link";
 import { addCity, updateCity, deleteCity } from "@/lib/actions/lead.actions";
 
 interface City {
@@ -186,10 +187,13 @@ export default function CityList({ initialCities }: { initialCities: City[] }) {
                           />
                         </div>
                       ) : (
-                        <div className="flex items-center gap-3 font-medium text-slate-700">
+                        <Link
+                          href={`/cities/${city.id}`}
+                          className="flex items-center gap-3 font-medium text-slate-700 hover:text-blue-600 hover:underline transition-colors"
+                        >
                           <MapPin className="w-4 h-4 text-slate-400 group-hover:text-[#3da9d4] transition-colors" />
                           {city.name}
-                        </div>
+                        </Link>
                       )}
                     </td>
 

@@ -1,5 +1,5 @@
- "use client";
-
+"use client";
+ 
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { createTicket, getOperators, searchOperatorsByMobile } from "@/lib/actions/ticket.actions";
@@ -61,7 +61,7 @@ interface FormData {
   travel_type: "AC" | "Non-AC";
   ticket_number: string;
   account_id: string;
-  account_type: "Cash" | "UPI";
+  account_type: "Cash" | "UPI" | "Other";
   amount: number;
   operator_id: string;
 }
@@ -102,7 +102,6 @@ export default function TicketBookingFormUpdated() {
     account_type: "Cash",
     amount: 0,
     operator_id: "",
-  });
 
   const [newSeatNumber, setNewSeatNumber] = useState("");
 
@@ -256,6 +255,9 @@ export default function TicketBookingFormUpdated() {
       if (!formData.account_id) {
         throw new Error("Please select an account");
       }
+      if (!formData.ticket_number.trim()) {
+        throw new Error("Ticket No is required");
+      }
 
       const ticketData = {
         ...formData,
@@ -263,7 +265,7 @@ export default function TicketBookingFormUpdated() {
         journey_date: new Date(formData.journey_date).toISOString(),
         booking_date: new Date(formData.booking_date).toISOString(),
         pickup_time: formData.pickup_time + ":00",
-        operator_id: formData.operator_id || undefined,
+        operator_id: formData.operator_id || null,
       };
 
       await createTicket(ticketData as any);
@@ -302,10 +304,10 @@ export default function TicketBookingFormUpdated() {
   const selectedAccount = accounts.find(acc => acc.id === formData.account_id);
 
   return (
-    <div className="max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-lg">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Travel Ticket Booking</h2>
-        <p className="text-gray-600">Book a new travel ticket with operator and payment details</p>
+    <div className="w-full max-w-6xl mx-auto p-4 bg-transparent">
+      <div className="mb-4">
+        <h2 className="text-xl font-bold text-gray-900 mb-1">Travel Ticket Booking</h2>
+        <p className="text-sm text-gray-600">Book a new travel ticket with operator and payment details</p>
       </div>
 
       {success && (
@@ -322,124 +324,137 @@ export default function TicketBookingFormUpdated() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-8">
+      <form onSubmit={handleSubmit} className="space-y-4">
 
-
-        {/* Basic Ticket Details */}
-        <div className="border-b pb-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Tag className="w-5 h-5" />
-            Basic Ticket Details
-          </h3>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Pickup City
-              </label>
-              <select
-                value={formData.pickup_city}
-                onChange={(e) => handleInputChange("pickup_city", e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
-              >
-                <option value="">Select city</option>
-                {cities.map((city) => (
-                  <option key={city.id} value={city.name}>{city.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Pickup Area
-              </label>
-              <input
-                type="text"
-                value={formData.pickup_area}
-                onChange={(e) => handleInputChange("pickup_area", e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="e.g., Connaught Place"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Drop City
-              </label>
-              <select
-                value={formData.drop_city}
-                onChange={(e) => handleInputChange("drop_city", e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
-              >
-                <option value="">Select city</option>
-                {cities.map((city) => (
-                  <option key={city.id} value={city.name}>{city.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Drop Location
-              </label>
-              <input
-                type="text"
-                value={formData.drop_location}
-                onChange={(e) => handleInputChange("drop_location", e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="e.g., Bandra Station"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Journey Date
-              </label>
-              <input
-                type="date"
-                value={formData.journey_date}
-                onChange={(e) => handleInputChange("journey_date", e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Booking Date
-              </label>
-              <input
-                type="date"
-                value={formData.booking_date}
-                onChange={(e) => handleInputChange("booking_date", e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Passenger Name
-              </label>
-              <input
-                type="text"
-                value={formData.passenger_name}
-                onChange={(e) => handleInputChange("passenger_name", e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter passenger name"
-                required
-              />
-            </div>
+            {/* Basic Ticket Details */}
+            <div className="border-b pb-3">
+              <h3 className="text-base font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                <Tag className="w-4 h-4" />
+                Basic Ticket Details
+              </h3>
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Booking Date *
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.booking_date}
+                      onChange={(e) => handleInputChange("booking_date", e.target.value)}
+                      className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Ticket No *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.ticket_number}
+                      onChange={(e) => handleInputChange("ticket_number", e.target.value)}
+                      className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Enter ticket number (required)"
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Pickup City *
+                    </label>
+                    <select
+                      value={formData.pickup_city}
+                      onChange={(e) => handleInputChange("pickup_city", e.target.value)}
+                      className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required
+                    >
+                      <option value="">Select city</option>
+                      {cities.map((city) => (
+                        <option key={city.id} value={city.name}>{city.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Pickup Area
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.pickup_area}
+                      onChange={(e) => handleInputChange("pickup_area", e.target.value)}
+                      className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="e.g., Connaught Place"
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Drop City *
+                    </label>
+                    <select
+                      value={formData.drop_city}
+                      onChange={(e) => handleInputChange("drop_city", e.target.value)}
+                      className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required
+                    >
+                      <option value="">Select city</option>
+                      {cities.map((city) => (
+                        <option key={city.id} value={city.name}>{city.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Drop Location
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.drop_location}
+                      onChange={(e) => handleInputChange("drop_location", e.target.value)}
+                      className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="e.g., Bandra Station"
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Mobile Number *
+                    </label>
+                    <input
+                      type="tel"
+                      value={formData.mobile_number}
+                      onChange={(e) => handleInputChange("mobile_number", e.target.value)}
+                      className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Passenger Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.passenger_name}
+                      onChange={(e) => handleInputChange("passenger_name", e.target.value)}
+                      className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Enter passenger name"
+                      required
+                    />
+                  </div>
+                </div>
 
             <div>
               <OperatorSearchSelector 
                 label="Operator (Optional)"
                 selectedOperatorId={formData.operator_id}
-                onSelect={(id) => handleInputChange("operator_id", id || "")}
+                onSelect={(id) => handleInputChange("operator_id", id ?? null)}
               />
               {selectedOperator && (
                 <div className="mt-2 p-2 bg-gray-50 rounded text-xs">
@@ -543,14 +558,28 @@ export default function TicketBookingFormUpdated() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Ticket Number (Optional)
+                Booking Date *
+              </label>
+              <input
+                type="date"
+                value={formData.booking_date}
+                onChange={(e) => handleInputChange("booking_date", e.target.value)}
+                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Ticket No *
               </label>
               <input
                 type="text"
                 value={formData.ticket_number}
                 onChange={(e) => handleInputChange("ticket_number", e.target.value)}
                 className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Leave blank to auto-generate"
+                placeholder="Enter ticket number (required)"
+                required
               />
             </div>
           </div>
@@ -600,47 +629,30 @@ export default function TicketBookingFormUpdated() {
 
         
         {/* Payment Details */}
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Wallet className="w-5 h-5" />
+        <div className="pt-2">
+          <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+            <Wallet className="w-4 h-4" />
             Payment Details
           </h3>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Account Selection
               </label>
               <select
-                value={formData.account_id}
-                onChange={(e) => handleInputChange("account_id", e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
-              >
-                <option value="">Select account</option>
-                {accounts.map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.name} ({account.type})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Account Type
-              </label>
-              <select
                 value={formData.account_type}
-                onChange={(e) => handleInputChange("account_type", e.target.value as "Cash" | "UPI")}
+                onChange={(e) => handleInputChange("account_type", e.target.value)}
                 className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 required
               >
                 <option value="Cash">Cash</option>
                 <option value="UPI">UPI</option>
+                <option value="Other">Other</option>
               </select>
             </div>
 
+            
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Amount (₹)
@@ -656,15 +668,15 @@ export default function TicketBookingFormUpdated() {
           </div>
         </div>
 
-        <div className="mt-8">
+        <div className="mt-4">
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium"
+            className="w-full sm:w-auto bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium"
           >
             {loading ? (
               <span className="flex items-center justify-center gap-2">
-                <Loader2 className="w-5 h-5 animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin" />
                 Booking Ticket...
               </span>
             ) : (

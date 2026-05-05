@@ -224,6 +224,7 @@ return (
                   <select name="type" required className="input-primary pl-9">
                     <option value="Cash">Cash</option>
                     <option value="UPI">UPI</option>
+                    <option value="Other">Other</option>
                   </select>
                 </div>
               </label>

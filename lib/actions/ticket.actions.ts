@@ -8,7 +8,7 @@ export interface CreateTicketPayload {
   passenger_name: string;
   mobile_number: string;
   pickup_city: string;
-  pickup_area: string;
+  pickup_location: string;
   drop_city: string;
   drop_location: string;
   journey_date: string;
@@ -19,10 +19,10 @@ export interface CreateTicketPayload {
   bus_number: string;
   travel_type: "AC" | "Non-AC";
   ticket_number: string;
-  account_id: string;
+  account_id: string | null;
   account_type: "Cash" | "UPI";
   amount: number;
-  operator_id: string;
+  operator_id?: string | null;
   operator_name?: string;
   operator_mobile?: string;
 }
@@ -33,7 +33,7 @@ export interface Ticket {
   passenger_name: string;
   mobile_number: string;
   pickup_city: string;
-  pickup_area: string;
+  pickup_location: string;
   drop_city: string;
   drop_location: string;
   journey_date: string;
@@ -50,7 +50,7 @@ export interface Ticket {
   operator_payable: number;
   settlement_paid_to_operator: boolean;
   settlement_paid_at: string | null;
-  operator_id: string;
+  operator_id?: string | null;
   operator_name?: string;
   operator_mobile?: string;
   created_at: string;
@@ -156,8 +156,7 @@ export async function createTicket(data: CreateTicketPayload) {
         passenger_name: data.passenger_name,
         mobile_number: data.mobile_number,
         pickup_city: data.pickup_city,
-        pickup_area: data.pickup_area,
-        pickup_location: data.pickup_area, // Use pickup_area as pickup_location
+        pickup_location: data.pickup_location,
         drop_city: data.drop_city,
         drop_location: data.drop_location,
         journey_date: data.journey_date,
@@ -170,7 +169,8 @@ export async function createTicket(data: CreateTicketPayload) {
         account_id: data.account_id,
         account_type: data.account_type,
         amount: data.amount,
-        operator_id: data.operator_id,
+        payment_status: 'not_paid', // Initialize payment status
+        operator_id: data.operator_id || null,
       },
     ])
 
@@ -187,17 +187,25 @@ export async function createTicket(data: CreateTicketPayload) {
     accountId = await getOrCreateCashAccount();
   }
 
-  // Step 2: Create accounting entry for full ticket amount as income
+  // Step 2: Get Ticket Booking category
+  const { data: ticketCategory } = await supabase
+    .from("accounting_categories")
+    .select("id")
+    .eq("name", "Ticket Booking")
+    .eq("category_type", "Income")
+    .single();
+
+  // Step 3: Create accounting entry for full ticket amount as income
   const { error: accountingError } = await supabase.from("accounting_entries").insert([
     {
-      description: `Ticket Booking - ${data.passenger_name} (${data.account_type})`,
-      amount: data.amount,
-      type: "income",
-      category: "ticket_booking",
-      reference_type: "ticket",
-      reference_id: newTicket.id,
-      date: new Date().toISOString().split("T")[0],
+      entry_type: "Income",
       account_id: accountId,
+      category_id: ticketCategory?.id || null,
+      amount: data.amount,
+      entry_date: new Date().toISOString().split("T")[0],
+      description: `Ticket Booking - ${data.passenger_name} (${data.account_type})`,
+      ticket_id: newTicket.id,
+      created_at: new Date().toISOString(),
     },
   ]);
 
@@ -255,14 +263,22 @@ export async function createTicket(data: CreateTicketPayload) {
 
 // --- 2. GET ALL TICKETS ---
 export async function getTickets(): Promise<Ticket[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("tickets")
-    .select("*")
-    .order("created_at", { ascending: false });
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("tickets")
+      .select("*")
+      .order("created_at", { ascending: false });
 
-  if (error) return [];
-  return (data || []) as unknown as Ticket[];
+    if (error) {
+      console.error("Error fetching tickets:", error);
+      return [];
+    }
+    return (data || []) as unknown as Ticket[];
+  } catch (error) {
+    console.error("Unexpected error fetching tickets:", error);
+    return [];
+  }
 }
 
 // --- 3. GET ACCOUNTS ---
@@ -400,11 +416,11 @@ export async function cancelTicket(ticketId: string) {
 
   if (!ticket) throw new Error("Ticket not found");
 
-  // Update ticket status
-  await supabase
-    .from("tickets")
-    .update({ status: "Cancelled" })
-    .eq("id", ticketId);
+  // Update ticket - remove status update as column doesn't exist
+  // await supabase
+  //   .from("tickets")
+  //   .update({ status: "Cancelled" })
+  //   .eq("id", ticketId);
 
   // Reverse the income entry (deduct from account)
   if (ticket.amount > 0) {
@@ -438,7 +454,7 @@ export async function cancelTicket(ticketId: string) {
 
 
 // --- 9. ADD NEW ACCOUNT ---
-export async function addAccount(name: string, type: "Cash" | "UPI") {
+export async function addAccount(name: string, type: "Cash" | "UPI" | "Other") {
   const supabase = await createClient();
   const { error } = await supabase
     .from("accounts")
@@ -499,25 +515,49 @@ export async function getIncomeEntries() {
 }
 
 // --- 13. GET TICKET STATISTICS ---
-export async function getTicketStats() {
+export async function getTicketsStats() {
   const supabase = await createClient();
-  const today = new Date().toISOString().split("T")[0];
 
-  const { data: allTickets } = await supabase
+  // Total tickets count
+  const { count: totalTickets } = await supabase
     .from("tickets")
-    .select("id, amount, commission_amount, settlement_paid_to_operator, journey_date, created_at");
+    .select("*", { count: "exact", head: true });
 
-  if (!allTickets) return null;
+  // Settled tickets (using payment_status or settlements join)
+  const { count: settledTickets } = await supabase
+    .from("tickets")
+    .select("*", { 
+      count: "exact", 
+      head: true 
+    })
+    .eq("payment_status", "paid");
+
+  // Total amount sum
+  const { data: totalAmountData } = await supabase
+    .from("tickets")
+    .select("amount")
+    .gte("amount", 0);
+
+  const totalAmount = totalAmountData?.reduce((sum: number, t: any) => sum + (t.amount || 0), 0) || 0;
+
+  // Pending amount (not paid)
+  const { data: pendingAmountData } = await supabase
+    .from("tickets")
+    .select("amount")
+    .or("payment_status.eq.not_paid,payment_status.eq.partial");
+
+  const pendingAmount = pendingAmountData?.reduce((sum: number, t: any) => sum + (t.amount || 0), 0) || 0;
+
+  // Average ticket value
+  const avgTicketValue = totalTickets ? Math.round(totalAmount / totalTickets) : 0;
 
   return {
-    totalBooked: allTickets.length,
-    totalSettled: allTickets.filter((t: { settlement_paid_to_operator: boolean }) => t.settlement_paid_to_operator).length,
-    totalAmount: allTickets.reduce((sum: number, t: { amount: number }) => sum + (t.amount || 0), 0),
-    totalCommission: allTickets.reduce((sum: number, t: { commission_amount: number }) => sum + (t.commission_amount || 0), 0),
-    todayBookings: allTickets.filter((t: { created_at: string }) => {
-      const bookingDate = new Date(t.created_at).toISOString().split("T")[0];
-      return bookingDate === today;
-    }).length,
+    totalTickets: totalTickets || 0,
+    settledTickets: settledTicketsCount || 0,
+    totalAmount,
+    pendingAmount,
+    avgTicketValue,
+    pendingCount: totalTickets ? totalTickets - settledTickets : 0
   };
 }
 
@@ -645,4 +685,155 @@ export async function getSettlementHistory() {
 
   if (error) return [];
   return data || [];
+}
+
+// --- UPDATE TICKET ---
+export async function updateTicket(ticketId: string, updateData: Partial<CreateTicketPayload> & { seat_numbers?: string[] }) {
+  const supabase = await createClient();
+  
+  console.log('=== DEBUG: updateTicket called ===');
+  console.log('Ticket ID:', ticketId);
+  console.log('Update Data:', JSON.stringify(updateData, null, 2));
+  
+  try {
+    // START WITH A SINGLE FIELD TEST TO ISOLATE THE ISSUE
+    console.log('Testing with minimal field first...');
+    
+    // Test with just passenger_name first
+    const { data: testData, error: testError } = await supabase
+      .from("tickets")
+      .update({ passenger_name: updateData.passenger_name || "Test Update" })
+      .eq("id", ticketId)
+      .select()
+      .single();
+
+    if (testError) {
+      console.error('=== MINIMAL TEST FAILED ===');
+      console.error('Error Code:', testError.code);
+      console.error('Error Message:', testError.message);
+      console.error('Error Details:', testError.details);
+      console.error('Error Hint:', testError.hint);
+      console.error('Full Error Object:', JSON.stringify(testError, null, 2));
+      throw testError;
+    }
+    
+    console.log('✅ Minimal test passed, proceeding with full update...');
+    
+    // If minimal test passed, proceed with full update
+    const updateFields: Record<string, any> = {};
+    
+    // Only include fields that actually exist in the database
+    if (updateData.passenger_name) {
+      updateFields.passenger_name = updateData.passenger_name;
+      console.log('Adding passenger_name to update');
+    }
+    
+    if (updateData.mobile_number) {
+      updateFields.mobile_number = updateData.mobile_number;
+      console.log('Adding mobile_number to update');
+    }
+    
+    if (updateData.pickup_city) {
+      updateFields.pickup_city = updateData.pickup_city;
+      console.log('Adding pickup_city to update');
+    }
+    
+    if (updateData.drop_city) {
+      updateFields.drop_city = updateData.drop_city;
+      console.log('Adding drop_city to update');
+    }
+    
+    if (updateData.pickup_location) {
+      updateFields.pickup_location = updateData.pickup_location;
+      console.log('Adding pickup_location to update');
+    }
+    
+    if (updateData.drop_location) {
+      updateFields.drop_location = updateData.drop_location;
+      console.log('Adding drop_location to update');
+    }
+    
+    if (updateData.journey_date) {
+      updateFields.journey_date = updateData.journey_date;
+      console.log('Adding journey_date to update');
+    }
+    
+    if (updateData.total_seats) {
+      updateFields.total_seats = updateData.total_seats;
+      console.log('Adding total_seats to update');
+    }
+    
+    if (updateData.pickup_time) {
+      updateFields.pickup_time = updateData.pickup_time;
+      console.log('Adding pickup_time to update');
+    }
+    
+    if (updateData.bus_number) {
+      updateFields.bus_number = updateData.bus_number;
+      console.log('Adding bus_number to update');
+    }
+    
+    if (updateData.travel_type) {
+      updateFields.travel_type = updateData.travel_type;
+      console.log('Adding travel_type to update');
+    }
+    
+    if (updateData.amount) {
+      updateFields.amount = updateData.amount;
+      console.log('Adding amount to update');
+    }
+    
+    if (updateData.operator_id) {
+      updateFields.operator_id = updateData.operator_id;
+      console.log('Adding operator_id to update');
+    }
+    
+    if (updateData.account_type) {
+      updateFields.account_type = updateData.account_type;
+      console.log('Adding account_type to update');
+    }
+    
+    if (updateData.seat_numbers) {
+      updateFields.seat_numbers = updateData.seat_numbers;
+      console.log('Adding seat_numbers to update');
+    }
+    
+    console.log('Final update fields:', JSON.stringify(updateFields, null, 2));
+    
+    if (Object.keys(updateFields).length === 0) {
+      console.log('No additional fields to update, returning minimal test result');
+      return testData;
+    }
+    
+    console.log('Executing full database update...');
+    
+    // Perform the full update
+    const { data, error } = await supabase
+      .from("tickets")
+      .update(updateFields)
+      .eq("id", ticketId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('=== FULL UPDATE FAILED ===');
+      console.error('Error Code:', error.code);
+      console.error('Error Message:', error.message);
+      console.error('Error Details:', error.details);
+      console.error('Error Hint:', error.hint);
+      console.error('Full Error Object:', JSON.stringify(error, null, 2));
+      throw error;
+    }
+    
+    console.log('✅ Full update successful:', data);
+    revalidatePath("/tickets");
+    return data;
+  } catch (error) {
+    console.error('=== CATCH BLOCK ERROR ===');
+    console.error('Error type:', typeof error);
+    console.error('Error message:', (error as Error).message);
+    console.error('Error stack:', (error as Error).stack);
+    console.error('Full error:', JSON.stringify(error, null, 2));
+    throw error;
+  }
 }

@@ -12,6 +12,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import Link from "next/link";
 import { addManualCustomer } from "@/lib/actions/lead.actions";
 
 interface Customer {
@@ -133,21 +134,30 @@ export default function CustomerList({
                       <div className="w-9 h-9 rounded-full bg-[#3da9d4]/10 flex items-center justify-center text-[#3da9d4] font-bold shrink-0 text-sm">
                         {(customer.name || "U").charAt(0).toUpperCase()}
                       </div>
-                      <span className="font-bold text-slate-800 text-sm">
+                      <Link
+                        href={`/customers/${customer.id}`}
+                        className="font-bold text-slate-800 text-sm hover:text-blue-600 hover:underline transition-colors"
+                      >
                         {customer.name || "Unknown Customer"}
-                      </span>
+                      </Link>
                     </div>
                   </td>
 
                   <td className="px-6 py-4">
-                    <div className="text-sm text-slate-600 font-medium flex items-center gap-2">
+                    <Link
+                      href={`/customers/${customer.id}`}
+                      className="text-sm text-slate-600 font-medium flex items-center gap-2 hover:text-blue-600 hover:underline transition-colors"
+                    >
                       <Phone className="w-4 h-4 text-slate-400" />
                       {customer.mobile_number || "N/A"}
-                    </div>
+                    </Link>
                   </td>
 
                   <td className="px-6 py-4 text-right">
-                    <span className="text-sm text-slate-500 flex items-center justify-end gap-1.5 font-medium">
+                    <Link
+                      href={`/customers/${customer.id}`}
+                      className="text-sm text-slate-500 flex items-center justify-end gap-1.5 font-medium hover:text-blue-600 hover:underline transition-colors"
+                    >
                       <Calendar className="w-4 h-4 shrink-0 text-slate-400" />
                       {new Date(customer.created_at).toLocaleDateString(
                         "en-IN",
@@ -157,7 +167,7 @@ export default function CustomerList({
                           year: "numeric",
                         },
                       )}
-                    </span>
+                    </Link>
                   </td>
                 </tr>
               ))}

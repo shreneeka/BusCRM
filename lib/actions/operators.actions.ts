@@ -143,6 +143,8 @@ export async function getOperatorById(id: string): Promise<Operator | null> {
 export async function getOperatorSummary(id: string) {
   const supabase = await createClient();
 
+  console.log("Fetching operator summary for ID:", id);
+
   // Get operator details
   const { data: operator, error: operatorError } = await supabase
     .from("operators")
@@ -150,7 +152,15 @@ export async function getOperatorSummary(id: string) {
     .eq("id", id)
     .single();
 
-  if (operatorError || !operator) {
+  console.log("Operator query result:", { operator, operatorError });
+
+  if (operatorError) {
+    console.error("Operator database error:", operatorError);
+    throw new Error(`Database error: ${operatorError.message}`);
+  }
+
+  if (!operator) {
+    console.error("Operator not found for ID:", id);
     throw new Error("Operator not found");
   }
 
@@ -164,14 +174,23 @@ export async function getOperatorSummary(id: string) {
     console.error("Error fetching tickets:", ticketsError);
   }
 
-  // Get settlement statistics
-  const { data: settlements, error: settlementsError } = await supabase
-    .from("operator_settlements")
-    .select("commission_amount, operator_payable, paid_at")
-    .eq("operator_id", id);
+  // Get settlement statistics - handle missing table gracefully
+  let settlements: Array<{paid_amount?: number, remaining_amount?: number, payment_status: string, created_at: string}> = [];
+  try {
+    const { data: settlementsData, error: settlementsError } = await supabase
+      .from("operator_settlements")
+      .select("paid_amount, remaining_amount, payment_status, created_at")
+      .eq("operator_name", operator.name);
 
-  if (settlementsError) {
-    console.error("Error fetching settlements:", settlementsError);
+    if (settlementsError) {
+      console.log("Settlements table not available or other error:", settlementsError);
+      settlements = [];
+    } else {
+      settlements = settlementsData || [];
+    }
+  } catch (error) {
+    console.log("Error accessing settlements table:", error);
+    settlements = [];
   }
 
   const totalTickets = tickets?.length || 0;
@@ -183,8 +202,8 @@ export async function getOperatorSummary(id: string) {
   const settledAmount = tickets?.filter(t => t.settlement_paid_to_operator === true).reduce((sum, t) => sum + (t.amount || 0), 0) || 0;
   
   const totalCommission = tickets?.reduce((sum, t) => sum + (t.commission_amount || 0), 0) || 0;
-  const totalPaid = settlements?.reduce((sum, s) => sum + (s.operator_payable || 0), 0) || 0;
-  const paidSettlements = settlements?.length || 0;
+  const totalPaid = settlements?.reduce((sum, s) => sum + (s.paid_amount || 0), 0) || 0;
+  const paidSettlements = settlements?.filter(s => s.payment_status === 'done').length || 0;
 
   return {
     operator: {

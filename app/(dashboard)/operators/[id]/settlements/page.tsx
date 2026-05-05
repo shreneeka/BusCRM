@@ -132,24 +132,6 @@ export default function OperatorSettlementsPage() {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Operator Info Card */}
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div>
-              <h3 className="text-sm font-medium text-gray-500 mb-1">Operator Name</h3>
-              <p className="text-lg font-semibold text-gray-900">{operator.name}</p>
-            </div>
-            <div>
-              <h3 className="text-sm font-medium text-gray-500 mb-1">Contact Person</h3>
-              <p className="text-lg font-semibold text-gray-900">{operator.person_name || "N/A"}</p>
-            </div>
-            <div>
-              <h3 className="text-sm font-medium text-gray-500 mb-1">Mobile Number</h3>
-              <p className="text-lg font-semibold text-gray-900">{operator.mobile_number || "N/A"}</p>
-            </div>
-          </div>
-        </div>
-
         {/* Settlements View */}
         <OperatorSettlementsView 
           operatorId={operator.id} 

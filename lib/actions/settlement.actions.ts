@@ -301,6 +301,9 @@ export async function createOperatorSettlement(settlementData: {
   payment_collected_at?: string;
   notes?: string;
   ticket_ids?: string[];
+  paid_amount?: number;
+  remaining_amount?: number;
+  account_id?: string; // Account for accounting entries
 }) {
   const supabase = await createClient();
 
@@ -337,41 +340,28 @@ export async function createOperatorSettlement(settlementData: {
       return { success: false, error: settlementError.message };
     }
 
-    // Create accounting entry for commission
-    if (settlementData.commission_amount > 0) {
-      // Get commission category
-      const { data: category } = await supabase
-        .from("accounting_categories")
-        .select("id")
-        .eq("name", "Commission")
-        .eq("category_type", "Income")
-        .single();
-
-      // Get cash account
-      const { data: account } = await supabase
-        .from("accounts")
-        .select("id")
-        .eq("name", "Cash")
-        .single();
-
-      if (category && account) {
-        const { error: accountingError } = await supabase
-          .from("accounting_entries")
-          .insert({
-            account_id: account.id,
-            category_id: category.id,
-            entry_type: "Income",
-            amount: settlementData.commission_amount,
-            entry_date: new Date().toISOString().split("T")[0],
-            description: `Commission from ${settlementData.operator_name}`,
-            created_at: new Date().toISOString(),
-          });
-
-        if (accountingError) {
-          console.error("Error creating accounting entry:", accountingError);
-          // Don't fail the whole operation if accounting entry fails
-        }
+    // Use the new automated accounting system
+    if (settlementData.account_id && settlementData.ticket_ids && settlementData.ticket_ids.length > 0) {
+      const { createSettlementWithAccounting } = await import("./ticket-automation.actions");
+      
+      const accountingResult = await createSettlementWithAccounting({
+        operator_id: settlementData.operator_name, // Will need to get actual operator_id
+        ticket_ids: settlementData.ticket_ids,
+        payment_amount: settlementData.paid_amount || settlementData.operator_payable,
+        payment_method: settlementData.settlement_method || "cash",
+        account_id: settlementData.account_id,
+        settlement_method: settlementData.settlement_method,
+        reference_number: settlementData.reference_number,
+        notes: settlementData.notes,
+      });
+      
+      if (!accountingResult.success) {
+        console.error("⚠️ Failed to create automated accounting entries:", accountingResult.error);
+      } else {
+        console.log("✅ Automated accounting entries created successfully");
       }
+    } else {
+      console.log("ℹ️ Skipping automated accounting - missing account_id or ticket_ids");
     }
 
     // Update tickets if provided
@@ -391,6 +381,94 @@ export async function createOperatorSettlement(settlementData: {
 
     revalidatePath("/settlements");
     revalidatePath("/tickets");
+    revalidatePath("/accounting");
+
+    // Create operator payment expense entry for any payment (partial or full)
+    if ((settlement.payment_status === 'done' || settlement.payment_status === 'partial') && (settlement.paid_amount && settlement.paid_amount > 0)) {
+      // Get or create Cash account
+      let { data: cashAccount } = await supabase
+        .from("accounts")
+        .select("id")
+        .eq("name", "Cash")
+        .single();
+
+      // Create the Cash account if it doesn't exist
+      if (!cashAccount) {
+        console.log("Cash account not found, creating it...");
+        const { data: newCashAccount, error: createCashError } = await supabase
+          .from("accounts")
+          .insert({
+            name: "Cash",
+            type: "Cash",
+            opening_balance: 0,
+            is_active: true,
+          })
+          .select("id")
+          .single();
+
+        if (createCashError) {
+          console.error("Error creating Cash account:", createCashError);
+        } else {
+          cashAccount = newCashAccount;
+          console.log("Cash account created successfully");
+        }
+      }
+
+      // Get or create Commission Settlement category
+      let { data: expenseCategory } = await supabase
+        .from("accounting_categories")
+        .select("id")
+        .eq("name", "Commission Settlement")
+        .eq("category_type", "Expense")
+        .single();
+
+      // Create the category if it doesn't exist
+      if (!expenseCategory) {
+        console.log("Commission Settlement category not found, creating it...");
+        const { data: newCategory, error: createError } = await supabase
+          .from("accounting_categories")
+          .insert({
+            name: "Commission Settlement",
+            category_type: "Expense",
+            description: "Payments/settlements made to bus operators",
+            is_active: true,
+          })
+          .select("id")
+          .single();
+
+        if (createError) {
+          console.error("Error creating Commission Settlement category:", createError);
+        } else {
+          expenseCategory = newCategory;
+          console.log("Commission Settlement category created successfully");
+        }
+      }
+
+      if (cashAccount && expenseCategory) {
+        const paymentType = settlement.payment_status === 'done' ? 'Full payment' : 'Partial payment';
+        const paymentAmount = settlement.paid_amount || 0;
+        const { error: expenseError } = await supabase
+          .from("accounting_entries")
+          .insert({
+            account_id: cashAccount.id,
+            category_id: expenseCategory.id,
+            entry_type: "Expense",
+            amount: paymentAmount,
+            entry_date: new Date().toISOString().split("T")[0],
+            description: `${paymentType} to ${settlement.operator_name} (${settlement.mobile_number || 'N/A'}) - ₹${paymentAmount}${settlement.payment_status === 'partial' ? ` (Remaining: ₹${settlement.remaining_amount || 0})` : ''}`,
+            created_at: new Date().toISOString(),
+          });
+
+        if (expenseError) {
+          console.error("Error creating operator expense entry:", expenseError);
+        } else {
+          console.log(`✅ Expense entry created: ${paymentType} of ₹${paymentAmount} for ${settlement.operator_name}`);
+        }
+      } else {
+        if (!cashAccount) console.error("❌ Cash account not found");
+        if (!expenseCategory) console.error("❌ Commission Settlement category not found and could not be created");
+      }
+    }
 
     return { success: true, data: settlement };
   } catch (error) {
@@ -458,6 +536,8 @@ export async function updateSettlementPayment(
   const supabase = await createClient();
 
   try {
+    console.log(`🔄 updateSettlementPayment called:`, { settlementId, isPaid, paymentAmount });
+    
     // First get the current settlement to calculate amounts
     const { data: currentSettlement, error: fetchError } = await supabase
       .from("operator_settlements")
@@ -468,6 +548,17 @@ export async function updateSettlementPayment(
     if (fetchError) {
       console.error("Error fetching settlement:", fetchError);
       return { success: false, error: fetchError.message };
+    }
+
+    // Validate payment amount doesn't exceed remaining amount
+    if (paymentAmount && paymentAmount > 0) {
+      const remainingAmount = (currentSettlement.remaining_amount ?? currentSettlement.operator_payable);
+      if (paymentAmount > remainingAmount) {
+        return { 
+          success: false, 
+          error: `Payment amount (₹${paymentAmount.toFixed(2)}) cannot exceed remaining amount (₹${remainingAmount.toFixed(2)})` 
+        };
+      }
     }
 
     const updateData: Record<string, unknown> = {
@@ -481,16 +572,37 @@ export async function updateSettlementPayment(
       updateData.paid_amount = currentSettlement.operator_payable;
       updateData.remaining_amount = 0;
     } else if (paymentAmount && paymentAmount > 0) {
-      // Handle partial payment
-      const paidAmount = (currentSettlement.paid_amount || 0) + paymentAmount;
-      const remainingAmount = currentSettlement.operator_payable - paidAmount;
+      // Handle partial payment with proper validation
+      const currentPaidAmount = currentSettlement.paid_amount || 0;
+      const newPaidAmount = currentPaidAmount + paymentAmount;
+      const newRemainingAmount = currentSettlement.operator_payable - newPaidAmount;
       
-      updateData.paid_amount = paidAmount;
-      updateData.remaining_amount = remainingAmount;
-      updateData.payment_status = remainingAmount <= 0 ? 'done' : 'partial';
-      updateData.is_paid = remainingAmount <= 0;
+      // Ensure we don't overpay
+      if (newRemainingAmount < 0) {
+        return { 
+          success: false, 
+          error: "Payment would result in overpayment. Please check the remaining amount." 
+        };
+      }
       
-      if (remainingAmount <= 0) {
+      updateData.paid_amount = newPaidAmount;
+      updateData.remaining_amount = Math.max(0, newRemainingAmount);
+      // Use a small epsilon for floating point comparison to handle precision issues
+      const isFullyPaid = newRemainingAmount <= 0.01;
+      updateData.payment_status = isFullyPaid ? 'done' : 'partial';
+      updateData.is_paid = isFullyPaid;
+      
+      console.log(`🎯 TRIGGER CHECK - Payment Update:`, {
+        currentPaid: `₹${currentPaidAmount}`,
+        newPayment: `₹${paymentAmount}`,
+        totalPaid: `₹${newPaidAmount}`,
+        remaining: `₹${newRemainingAmount}`,
+        isFullyPaid,
+        newStatus: updateData.payment_status,
+        willShowPaid: isFullyPaid ? 'YES ✅' : 'NO (still partial)'
+      });
+      
+      if (newRemainingAmount <= 0.01) {
         updateData.paid_at = new Date().toISOString();
       }
     } else {
@@ -498,6 +610,8 @@ export async function updateSettlementPayment(
       updateData.payment_status = 'pending';
     }
 
+    console.log(`📝 Updating settlement ${settlementId} with data:`, updateData);
+    
     const { data, error } = await supabase
       .from("operator_settlements")
       .update(updateData)
@@ -506,11 +620,154 @@ export async function updateSettlementPayment(
       .single();
 
     if (error) {
-      console.error("Error updating settlement payment:", error);
+      console.error("❌ Error updating settlement:", error);
       return { success: false, error: error.message };
     }
 
+    console.log("✅ Settlement updated successfully:", data);
     revalidatePath("/settlements");
+    revalidatePath("/accounting");
+
+    // Create operator payment expense entry for any payment (partial or full)
+    if ((data.payment_status === 'done' || data.payment_status === 'partial') && data.paid_amount > 0) {
+      // Get or create Cash account
+      let { data: cashAccount } = await supabase
+        .from("accounts")
+        .select("id")
+        .eq("name", "Cash")
+        .single();
+
+      // Create the Cash account if it doesn't exist
+      if (!cashAccount) {
+        console.log("Cash account not found, creating it...");
+        const { data: newCashAccount, error: createCashError } = await supabase
+          .from("accounts")
+          .insert({
+            name: "Cash",
+            type: "Cash",
+            opening_balance: 0,
+            is_active: true,
+          })
+          .select("id")
+          .single();
+
+        if (createCashError) {
+          console.error("Error creating Cash account:", createCashError);
+        } else {
+          cashAccount = newCashAccount;
+          console.log("Cash account created successfully");
+        }
+      }
+
+      // Get or create Commission Settlement category
+      let { data: expenseCategory } = await supabase
+        .from("accounting_categories")
+        .select("id")
+        .eq("name", "Commission Settlement")
+        .eq("category_type", "Expense")
+        .single();
+
+      // Create the category if it doesn't exist
+      if (!expenseCategory) {
+        console.log("Commission Settlement category not found, creating it...");
+        const { data: newCategory, error: createError } = await supabase
+          .from("accounting_categories")
+          .insert({
+            name: "Commission Settlement",
+            category_type: "Expense",
+            description: "Payments/settlements made to bus operators",
+            is_active: true,
+          })
+          .select("id")
+          .single();
+
+        if (createError) {
+          console.error("Error creating Commission Settlement category:", createError);
+        } else {
+          expenseCategory = newCategory;
+          console.log("Commission Settlement category created successfully");
+        }
+      }
+
+      // Get current settlement to check if this is second+ payment
+      const { data: currentSettlement } = await supabase
+        .from("operator_settlements")
+        .select("paid_amount")
+        .eq("id", settlementId)
+        .single();
+
+      // Determine commission amount based on payment sequence
+      const previousPaidAmount = currentSettlement?.paid_amount || 0;
+      const isSecondPayment = previousPaidAmount > 0;
+      const commissionRate = 10; // Default 10%
+      
+      // Calculate commission: 0% for second+ partial payments, 10% for first and final payments
+      let commissionAmount = 0;
+      if (data.payment_status === 'done' || !isSecondPayment) {
+        commissionAmount = (data.paid_amount * commissionRate) / 100;
+      }
+
+      console.log(`🔍 updateSettlementPayment - Accounting entry check:`, {
+      cashAccount: !!cashAccount,
+      expenseCategory: !!expenseCategory,
+      paid_amount: data.paid_amount,
+      payment_status: data.payment_status,
+      operator_name: data.operator_name,
+      willCreateEntry: !!(cashAccount && expenseCategory)
+    });
+
+    if (cashAccount && expenseCategory) {
+        const paymentType = data.payment_status === 'done' ? 'Full payment' : 'Partial payment';
+        const commissionDescription = commissionAmount > 0 
+          ? `Commission (${commissionRate}%) on ${isSecondPayment ? 'subsequent' : 'first'} payment`
+          : `No commission on second+ payment`;
+
+        // Use the new automated accounting system for settlement updates (Income only - no expense entries)
+        console.log(`🏦 Using automated accounting system for settlement update (Income only):`, {
+          settlement_id: settlementId,
+          paid_amount: data.paid_amount,
+          commission_amount: commissionAmount,
+          payment_status: data.payment_status
+        });
+
+        // For settlement updates, we only create commission income entry (no expense entries)
+        if (data.paid_amount > 0 && commissionAmount > 0) {
+          // Create commission income entry only
+          const { data: commissionCategory } = await supabase
+            .from("accounting_categories")
+            .select("id")
+            .eq("name", "Commission")
+            .eq("category_type", "Income")
+            .single();
+
+          if (commissionCategory) {
+            const { error: commissionIncomeError } = await supabase
+              .from("accounting_entries")
+              .insert({
+                account_id: cashAccount.id,
+                category_id: commissionCategory.id,
+                entry_type: "Income",
+                amount: commissionAmount,
+                entry_date: new Date().toISOString().split("T")[0],
+                description: `Commission (${commissionRate}%) from ${data.operator_name} - Additional payment`,
+                settlement_id: settlementId,
+                created_at: new Date().toISOString(),
+              });
+
+            if (commissionIncomeError) {
+              console.error("❌ Error creating commission income entry:", commissionIncomeError);
+            } else {
+              console.log(`✅ Commission INCOME entry created: ₹${commissionAmount}`);
+            }
+          }
+        } else {
+          console.log(`ℹ️ No commission income entry created (commissionAmount: ${commissionAmount})`);
+        }
+      } else {
+        if (!cashAccount) console.error("❌ Cash account not found");
+        if (!expenseCategory) console.error("❌ Commission Settlement category not found and could not be created");
+      }
+    }
 
     return { success: true, data };
   } catch (error) {

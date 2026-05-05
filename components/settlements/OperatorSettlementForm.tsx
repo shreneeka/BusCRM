@@ -37,6 +37,14 @@ interface Ticket {
     mobile_number: string;
     commission_percentage: number;
   }[];
+  operator_settlements?: Array<{
+    id: string;
+    payment_status: string;
+    paid_amount: number;
+    remaining_amount: number;
+    operator_payable: number;
+    commission_percentage: number;
+  }>;
 }
 
 interface SettlementFormProps {
@@ -62,32 +70,52 @@ export default function OperatorSettlementForm({
   const [paymentCollectorName, setPaymentCollectorName] = useState("");
   const [paymentCollectorMobile, setPaymentCollectorMobile] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
 
 
   const fetchAutoData = useCallback(async () => {
-    if (selectedTicketIds.length === 0) return;
+    if (selectedTicketIds.length === 0) {
+      setIsLoading(false);
+      return;
+    }
     
+    setIsLoading(true);
     try {
       console.log("Fetching data for ticket IDs:", selectedTicketIds);
       
-      // Get first ticket to find operator
-      const { data: firstTicket, error: ticketError } = await supabase
+      // First check if all tickets belong to the same operator
+      const { data: allTickets, error: allTicketsError } = await supabase
         .from("tickets")
-        .select("operator_id")
-        .eq("id", selectedTicketIds[0])
-        .single();
+        .select("id, operator_id, operators!inner(name)")
+        .in("id", selectedTicketIds);
       
-      if (ticketError) {
-        console.error("Error fetching first ticket:", ticketError);
+      if (allTicketsError) {
+        console.error("Error fetching tickets:", allTicketsError);
         return;
       }
       
-      if (!firstTicket) {
-        console.log("No first ticket found");
+      if (!allTickets || allTickets.length === 0) {
+        console.log("No tickets found");
         return;
       }
       
+      // Check if all tickets belong to the same operator
+      const uniqueOperators = [...new Set(allTickets.map(t => t.operator_id))];
+      if (uniqueOperators.length > 1) {
+        console.error("Multiple operators detected:", uniqueOperators);
+        const operatorNames = [...new Set(allTickets.map(t => {
+          const op = t.operators as any;
+          return op?.name || 'Unknown';
+        }))].join(', ');
+        alert(`Error: Selected tickets belong to different operators (${operatorNames}). Please select tickets from only one operator at a time.`);
+        onClose();
+        return;
+      }
+      
+      // Get first ticket to find operator
+      const firstTicket = allTickets[0];
       console.log("First ticket operator_id:", firstTicket.operator_id);
       
       // Fetch operator
@@ -107,7 +135,7 @@ export default function OperatorSettlementForm({
         setAutoOperator(opData);
       }
       
-      // Fetch selected tickets with operator data
+      // Fetch selected tickets with operator data and settlement information
       const { data: ticketData, error: ticketsError } = await supabase
         .from("tickets")
         .select(`
@@ -119,7 +147,15 @@ export default function OperatorSettlementForm({
           operator_id,
           journey_date,
           pickup_city,
-          drop_city
+          drop_city,
+          operator_settlements (
+            id,
+            payment_status,
+            paid_amount,
+            remaining_amount,
+            operator_payable,
+            commission_percentage
+          )
         `)
         .in("id", selectedTicketIds);
       
@@ -180,16 +216,66 @@ export default function OperatorSettlementForm({
               };
             });
             
+            // Check if any tickets are already paid before proceeding
+            const paidTickets = ticketsWithOperators.filter(ticket => {
+              // Check direct payment_status if available
+              if ((ticket as any).payment_status === 'paid') return true;
+              
+              // Check settlement status
+              if (ticket.operator_settlements && ticket.operator_settlements.length > 0) {
+                const hasDoneSettlement = ticket.operator_settlements.some(s => s.payment_status === 'done');
+                const totalPaidAmount = ticket.operator_settlements.reduce((sum, settlement) => {
+                  return sum + (settlement.paid_amount || 0);
+                }, 0);
+                const operatorPayable = ticket.operator_settlements[0].operator_payable || ticket.amount;
+                return totalPaidAmount >= operatorPayable || hasDoneSettlement;
+              }
+              return false;
+            });
+            
+            if (paidTickets.length > 0) {
+              const paidTicketNumbers = paidTickets.map(t => t.ticket_number).join(', ');
+              alert(`Payment is already completed for ticket(s): ${paidTicketNumbers}. Settlement cannot be processed.`);
+              onClose();
+              return;
+            }
+            
             setSelectedTicketsData(ticketsWithOperators);
           }
         } else {
+          // Check if any tickets are already paid before proceeding
+          const paidTickets = ticketData.filter(ticket => {
+            // Check direct payment_status if available
+            if ((ticket as any).payment_status === 'paid') return true;
+            
+            // Check settlement status
+            if (ticket.operator_settlements && ticket.operator_settlements.length > 0) {
+              const hasDoneSettlement = ticket.operator_settlements.some(s => s.payment_status === 'done');
+              const totalPaidAmount = ticket.operator_settlements.reduce((sum, settlement) => {
+                return sum + (settlement.paid_amount || 0);
+              }, 0);
+              const operatorPayable = ticket.operator_settlements[0].operator_payable || ticket.amount;
+              return totalPaidAmount >= operatorPayable || hasDoneSettlement;
+            }
+            return false;
+          });
+          
+          if (paidTickets.length > 0) {
+            const paidTicketNumbers = paidTickets.map(t => t.ticket_number).join(', ');
+            alert(`Payment is already completed for ticket(s): ${paidTicketNumbers}. Settlement cannot be processed.`);
+            onClose();
+            return;
+          }
+          
           setSelectedTicketsData(ticketData);
         }
       }
     } catch (err) {
       console.error("Error fetching auto data:", err);
+    } finally {
+      setIsLoading(false);
     }
-  }, [supabase, selectedTicketIds]);
+  }, [supabase, selectedTicketIds, onClose]);
 
   useEffect(() => {
     fetchAutoData();
@@ -200,17 +286,42 @@ export default function OperatorSettlementForm({
 
 
   const calculateTotals = () => {
-    const totalAmount = selectedTicketsData.reduce((sum, ticket) => sum + (ticket.amount || 0), 0);
-    const commissionRate = autoOperator?.commission_percentage || 10;
+    const totalAmount = selectedTicketsData.reduce((sum, ticket) => {
+      // Always use the full ticket amount for total calculation
+      return sum + (ticket.amount || 0);
+    }, 0);
+    
+    // Calculate total already paid amount across all tickets
+    const totalPaidAmount = selectedTicketsData.reduce((sum, ticket) => {
+      if (ticket.operator_settlements && ticket.operator_settlements.length > 0) {
+        return sum + ticket.operator_settlements.reduce((settlementSum, settlement) => {
+          return settlementSum + (settlement.paid_amount || 0);
+        }, 0);
+      }
+      return sum;
+    }, 0);
+    
+    // Check if this is a second/subsequent payment (has existing settlements)
+    const hasExistingSettlements = selectedTicketsData.some(ticket => 
+      ticket.operator_settlements && ticket.operator_settlements.length > 0 && 
+      ticket.operator_settlements[0].payment_status === 'partial'
+    );
+    
+    // Apply commission only for first payment or final payment, not for second+ partial payments
+    const commissionRate = hasExistingSettlements ? 0 : (autoOperator?.commission_percentage || 10);
     const commissionAmount = totalAmount * commissionRate / 100;
-    const operatorPayable = totalAmount - commissionAmount;
+    const totalOperatorPayable = totalAmount - commissionAmount;
+    
+    // Calculate remaining amount (what's actually due for payment)
+    const remainingAmount = totalOperatorPayable - totalPaidAmount;
     
     return {
       totalTickets: selectedTicketsData.length,
       totalAmount,
       commissionAmount,
-      operatorPayable,
-      commissionRate
+      operatorPayable: remainingAmount, // Show remaining amount for partial payments
+      commissionRate: hasExistingSettlements ? 0 : (autoOperator?.commission_percentage || 10),
+      totalPaidAmount // Add paid amount for reference
     };
   };
 
@@ -227,10 +338,33 @@ export default function OperatorSettlementForm({
     
     if (!paymentAmount || parseFloat(paymentAmount) <= 0) {
       newErrors.paymentAmount = "Please enter a valid payment amount";
-    } else if (parseFloat(paymentAmount) > totals.operatorPayable) {
-      newErrors.paymentAmount = "Payment amount cannot exceed operator payable amount";
+    } else {
+      const paymentAmountNum = parseFloat(paymentAmount);
+      
+      // Check if any tickets have existing settlements (partial payments)
+      const hasExistingSettlements = selectedTicketsData.some(ticket => 
+        ticket.operator_settlements && ticket.operator_settlements.length > 0
+      );
+      
+      if (hasExistingSettlements) {
+        // For tickets with existing settlements, validate against remaining payable amount
+        if (paymentAmountNum > totals.operatorPayable) {
+          newErrors.paymentAmount = "Payment amount cannot exceed remaining payable amount";
+        }
+        
+        // Additional validation for partial payments
+        if (paymentAmountNum < totals.operatorPayable && paymentAmountNum < 0.01) {
+          newErrors.paymentAmount = "Partial payment amount must be at least ₹0.01";
+        }
+      } else {
+        // For unpaid tickets (no existing settlements), allow payment up to operator payable amount
+        // For partial payments, allow payment up to remaining amount
+        const maxPaymentAmount = hasExistingSettlements ? totals.operatorPayable : totals.operatorPayable;
+        if (paymentAmountNum > maxPaymentAmount) {
+          newErrors.paymentAmount = `Payment amount cannot exceed ${hasExistingSettlements ? 'remaining amount' : 'operator payable amount'} of ₹${maxPaymentAmount.toFixed(2)}`;
+        }
+      }
     }
-    
     
     if (!settlementMethod) {
       newErrors.settlementMethod = "Please select settlement method";
@@ -282,9 +416,26 @@ export default function OperatorSettlementForm({
       
       const settlementRecords = selectedTicketsData.map((ticket) => {
         const ticketOperatorPayable = ticket.amount - (ticket.amount * totals.commissionRate / 100);
-        // Apply "Amount - Paid amount" logic
-        const ticketPaidAmount = paymentAmountNum > 0 ? Math.min(paymentAmountNum, ticketOperatorPayable) : 0;
-        const ticketRemainingAmount = ticketOperatorPayable - ticketPaidAmount;
+        // Check if this ticket has existing settlements
+        const existingSettlement = ticket.operator_settlements && ticket.operator_settlements.length > 0 
+          ? ticket.operator_settlements[0] 
+          : null;
+        
+        let ticketPaidAmount = existingSettlement ? (existingSettlement.paid_amount || 0) : 0;
+        let ticketRemainingAmount = existingSettlement ? (existingSettlement.remaining_amount || 0) : ticketOperatorPayable;
+        
+        if (paymentAmountNum > 0) {
+          // For first payment or additional payment, apply payment amount
+          if (paymentAmountNum >= ticketRemainingAmount) {
+            // Full remaining payment for this ticket
+            ticketPaidAmount += ticketRemainingAmount;
+            ticketRemainingAmount = 0;
+          } else {
+            // Partial payment for this ticket
+            ticketPaidAmount += paymentAmountNum;
+            ticketRemainingAmount -= paymentAmountNum;
+          }
+        }
         
         return {
           ticket_id: ticket.id,
@@ -294,9 +445,9 @@ export default function OperatorSettlementForm({
           commission_percentage: totals.commissionRate,
           commission_amount: ticket.amount * totals.commissionRate / 100,
           operator_payable: ticketOperatorPayable,
-          is_paid: isFullPayment,
-          paid_at: paymentAmountNum > 0 ? new Date().toISOString() : null,
-          payment_status: paymentStatus,
+          is_paid: ticketRemainingAmount <= 0,
+          paid_at: ticketPaidAmount > 0 ? new Date().toISOString() : null,
+          payment_status: ticketRemainingAmount <= 0 ? 'done' : (ticketPaidAmount > 0 ? 'partial' : 'pending'),
           paid_amount: ticketPaidAmount > 0 ? ticketPaidAmount : null,
           remaining_amount: ticketRemainingAmount,
           settlement_method: settlementMethod,
@@ -344,8 +495,11 @@ export default function OperatorSettlementForm({
         });
       }
 
-      onSuccess();
-      onClose();
+      setPaymentSuccess(true);
+      setTimeout(() => {
+        onSuccess();
+        onClose();
+      }, 2000);
     } catch (error) {
       console.error("Settlement processing error:", error);
       alert("Failed to process settlement");
@@ -355,6 +509,18 @@ export default function OperatorSettlementForm({
   };
 
   const totals = calculateTotals();
+  
+  // Calculate full amounts for unpaid tickets (without commission deduction)
+  const fullTicketAmounts = selectedTicketsData.reduce((sum, ticket) => {
+    if (!ticket.operator_settlements || ticket.operator_settlements.length === 0) {
+      return sum + (ticket.amount || 0);
+    }
+    return sum;
+  }, 0);
+  
+  const hasExistingSettlements = selectedTicketsData.some(ticket => 
+    ticket.operator_settlements && ticket.operator_settlements.length > 0
+  );
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -373,7 +539,61 @@ export default function OperatorSettlementForm({
             </button>
           </div>
 
-          <div className="space-y-6">
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
+              <p className="text-sm text-gray-600">Loading settlement data...</p>
+            </div>
+          ) : paymentSuccess ? (
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-6 text-sm text-emerald-700 max-w-md">
+                <div className="flex items-center gap-3 mb-4">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+                  <div>
+                    <strong className="block font-semibold text-lg">Payment Completed Successfully!</strong>
+                    <p className="text-emerald-600 mt-1">Settlement has been processed and payment is marked as done.</p>
+                  </div>
+                </div>
+                <div className="text-center text-emerald-600 text-sm">
+                  This window will close automatically...
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-6">
+
+            {/* Error Messages */}
+            {Object.keys(errors).length > 0 && (
+              <div className="rounded-lg border border-rose-100 bg-rose-50 p-3 text-sm text-rose-700">
+                <strong className="block font-semibold mb-1">Please fix the following:</strong>
+                <ul className="list-disc list-inside space-y-1">
+                  {Object.entries(errors).map(([key, error]) => (
+                    <li key={key}>{error}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* No Tickets Found */}
+            {!isLoading && selectedTicketsData.length === 0 && (
+              <div className="text-center py-8">
+                <div className="text-gray-400 mb-4">
+                  <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No Tickets Found</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  The selected tickets could not be found or may have been already settled.
+                </p>
+                <button
+                  onClick={onClose}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            )}
 
             {/* Ticket Details Table */}
             {selectedTicketsData.length > 0 && (
@@ -401,7 +621,9 @@ export default function OperatorSettlementForm({
                           <td className="px-4 py-2 text-sm text-gray-900">{ticket.pickup_city} → {ticket.drop_city}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{new Date(ticket.journey_date).toLocaleDateString('en-IN')}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{ticket.operators?.[0]?.name || autoOperator?.name || 'N/A'}</td>
-                          <td className="px-4 py-2 text-sm font-medium text-gray-900">₹{ticket.amount.toFixed(2)}</td>
+                          <td className="px-4 py-2 text-sm font-medium text-gray-900">
+                          ₹{ticket.amount.toFixed(2)}
+                        </td>
                         </tr>
                       ))}
                     </tbody>
@@ -425,20 +647,30 @@ export default function OperatorSettlementForm({
                   <div>
                     <p className="text-sm text-blue-700">Total Amount</p>
                     <p className="text-lg font-semibold text-blue-900">
-                      ₹{totals.totalAmount.toFixed(2)}
+                      ₹{hasExistingSettlements ? totals.totalAmount.toFixed(2) : fullTicketAmounts.toFixed(2)}
                     </p>
                   </div>
                   <div>
                     <p className="text-sm text-blue-700">Commission ({totals.commissionRate}%)</p>
                     <p className="text-lg font-semibold text-green-600">
                       ₹{totals.commissionAmount.toFixed(2)}
+                      {totals.commissionRate === 0 && hasExistingSettlements && (
+                        <span className="text-xs text-gray-500 block">No commission on second+ payment</span>
+                      )}
                     </p>
                   </div>
                   <div>
-                    <p className="text-sm text-blue-700">Operator Payable</p>
-                    <p className="text-lg font-semibold text-blue-900">
-                      ₹{totals.operatorPayable.toFixed(2)}
+                    <p className="text-sm text-blue-700">
+                      {hasExistingSettlements ? 'Remaining Amount' : 'Operator Payable'}
                     </p>
+                    <p className="text-lg font-semibold text-blue-900">
+                      ₹{hasExistingSettlements ? totals.operatorPayable.toFixed(2) : (fullTicketAmounts - (fullTicketAmounts * totals.commissionRate / 100)).toFixed(2)}
+                    </p>
+                    {hasExistingSettlements && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Total already paid: ₹{totals.totalPaidAmount.toFixed(2)}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -458,14 +690,16 @@ export default function OperatorSettlementForm({
                       type="number"
                       value={paymentAmount}
                       onChange={(e) => setPaymentAmount(e.target.value)}
-                      placeholder="Enter payment amount"
+                      placeholder={hasExistingSettlements ? `Enter remaining amount (₹${totals.operatorPayable.toFixed(2)})` : `Enter payment amount (₹${totals.operatorPayable.toFixed(2)})`}
+                      step={0.01}
+                      max={hasExistingSettlements ? totals.operatorPayable : totals.operatorPayable}
                       className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
                   {errors.paymentAmount && (
                     <p className="mt-1 text-sm text-red-600">{errors.paymentAmount}</p>
                   )}
-                  {paymentAmount && parseFloat(paymentAmount) < totals.operatorPayable && (
+                  {paymentAmount && parseFloat(paymentAmount) < (hasExistingSettlements ? totals.operatorPayable : (fullTicketAmounts - (fullTicketAmounts * totals.commissionRate / 100))) && (
                     <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                       <div className="flex items-center gap-2 mb-2">
                         <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
@@ -474,7 +708,7 @@ export default function OperatorSettlementForm({
                       <div className="grid grid-cols-2 gap-3 text-sm">
                         <div>
                           <span className="text-gray-600">Total Amount:</span>
-                          <span className="ml-2 font-medium text-blue-600">₹{totals.operatorPayable.toFixed(2)}</span>
+                          <span className="ml-2 font-medium text-blue-600">₹{hasExistingSettlements ? totals.operatorPayable.toFixed(2) : (fullTicketAmounts - (fullTicketAmounts * totals.commissionRate / 100)).toFixed(2)}</span>
                         </div>
                         <div>
                           <span className="text-gray-600">Amount Paid:</span>
@@ -482,7 +716,7 @@ export default function OperatorSettlementForm({
                         </div>
                         <div>
                           <span className="text-gray-600">Remaining:</span>
-                          <span className="ml-2 font-medium text-orange-600">₹{(totals.operatorPayable - parseFloat(paymentAmount)).toFixed(2)}</span>
+                          <span className="ml-2 font-medium text-orange-600">₹{(hasExistingSettlements ? (totals.operatorPayable - parseFloat(paymentAmount)) : ((fullTicketAmounts - (fullTicketAmounts * totals.commissionRate / 100)) - parseFloat(paymentAmount))).toFixed(2)}</span>
                         </div>
                         <div>
                           <span className="text-gray-600">Formula:</span>
@@ -492,7 +726,7 @@ export default function OperatorSettlementForm({
                       <p className="text-xs text-yellow-700 mt-2">Status will be marked as &quot;Partial Paid&quot;</p>
                     </div>
                   )}
-                  {paymentAmount && parseFloat(paymentAmount) >= totals.operatorPayable && (
+                  {paymentAmount && parseFloat(paymentAmount) >= (hasExistingSettlements ? totals.operatorPayable : (fullTicketAmounts - (fullTicketAmounts * totals.commissionRate / 100))) && (
                     <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
                       <div className="flex items-center gap-2">
                         <CheckCircle2 className="w-4 h-4 text-green-600" />
@@ -655,6 +889,7 @@ export default function OperatorSettlementForm({
               </button>
             </div>
           </div>
+            )}
         </div>
       </div>
     </div>

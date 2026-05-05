@@ -3,14 +3,24 @@ import { getOperatorSummary } from "@/lib/actions/operators.actions";
 import { notFound } from "next/navigation";
 
 interface Props {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 export default async function OperatorDetailPage({ params }: Props) {
+  const { id } = await params;
+  console.log("OperatorDetailPage called with params:", { id });
+  
+  if (!id) {
+    console.error("No ID parameter provided");
+    notFound();
+  }
+  
   let operatorSummary;
   try {
-    operatorSummary = await getOperatorSummary(params.id);
+    operatorSummary = await getOperatorSummary(id);
+    console.log("Successfully fetched operator summary");
   } catch (error) {
+    console.error("Error in OperatorDetailPage:", error);
     notFound();
   }
 

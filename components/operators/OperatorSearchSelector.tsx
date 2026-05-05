@@ -6,16 +6,18 @@ import { searchOperatorsByName } from "@/lib/actions/ticket.actions";
 
 interface Operator {
   id: string;
+  name?: string; // For backward compatibility
   operator_name: string;
   person_name: string;
   mobile_number: string;
   commission_percent: number;
+  commission_percentage?: number; // For backward compatibility
 }
 
 interface OperatorSearchSelectorProps {
   label: string;
   selectedOperatorId: string;
-  onSelect: (operatorId: string | null) => void;
+  onSelect: (operatorId: string | null) => void; // already supports null
   name?: string;
 }
 
@@ -49,13 +51,19 @@ export default function OperatorSearchSelector({
       clearTimeout(debounceTimerRef.current);
     }
 
-    if (search.length >= 2) {
+    if (search && search.length >= 2) {
       debounceTimerRef.current = setTimeout(async () => {
         setIsSearching(true);
         try {
           const suggestions = await searchOperatorsByName(search);
           console.log("Search results:", suggestions);
-          setOperatorSuggestions(suggestions);
+          // Map the response to match our interface
+          const mappedSuggestions = suggestions.map((op: any) => ({
+            ...op,
+            operator_name: op.name || op.operator_name || '',
+            commission_percent: op.commission_percentage || op.commission_percent || 0
+          }));
+          setOperatorSuggestions(mappedSuggestions);
           setShowSuggestions(true);
         } catch (error) {
           console.error("Operator search error:", error);
@@ -66,7 +74,7 @@ export default function OperatorSearchSelector({
       }, 300);
     } else {
       setOperatorSuggestions([]);
-      setShowSuggestions(search.length > 0);
+      setShowSuggestions(!!(search && search.length > 0));
     }
 
     return () => {
@@ -79,7 +87,7 @@ export default function OperatorSearchSelector({
   const handleSelectOperator = useCallback((operator: Operator) => {
     console.log("Selected operator:", operator);
     onSelect(operator.id);
-    setSearch(operator.operator_name);
+    setSearch(operator.operator_name || operator.name || '');
     setShowSuggestions(false);
   }, [onSelect]);
 
@@ -89,13 +97,9 @@ export default function OperatorSearchSelector({
     setShowSuggestions(false);
   };
 
-  const handleNoOperator = () => {
-    handleClear();
-  };
-
   return (
     <div ref={wrapperRef} className="relative w-full z-40">
-      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
+      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
         {label}
       </label>
       <input type="hidden" name={name} value={selectedOperatorId || ""} />
@@ -103,12 +107,12 @@ export default function OperatorSearchSelector({
         <Users className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
         <input
           type="text"
-          className="input-primary pl-9 bg-white text-sm py-2.5 pr-8 w-full"
+          className="input-primary pl-9 bg-white text-sm py-2 pr-8 w-full"
           placeholder="Search Operator by name or phone..."
-          value={search}
+          value={search || ""}
           autoComplete="off"
           onChange={(e) => {
-            const value = e.target.value;
+            const value = e.target.value || "";
             console.log("Search input:", value);
             setSearch(value);
             if (selectedOperatorId) onSelect(null);
@@ -130,15 +134,6 @@ export default function OperatorSearchSelector({
       {showSuggestions && (
         <div className="absolute left-0 right-0 mt-1 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden animate-in slide-in-from-top-1 z-50">
           <div className="max-h-48 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-            {/* No Operator option */}
-            <button
-              type="button"
-              onClick={handleNoOperator}
-              className="w-full text-left px-4 py-3 text-sm font-medium text-[#3da9d4] bg-[#3da9d4]/10 hover:bg-[#3da9d4]/20 border-b border-slate-50 transition-colors first:rounded-t-lg"
-            >
-              No Operator (Optional)
-            </button>
-            
             {isSearching ? (
               <div className="px-4 py-3 text-center text-sm text-slate-500 flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -153,11 +148,11 @@ export default function OperatorSearchSelector({
                   className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 flex items-start justify-between gap-3 last:rounded-b-lg"
                 >
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-slate-900 truncate">{operator.operator_name}</p>
+                    <p className="font-semibold text-slate-900 truncate">{operator.operator_name || operator.name}</p>
                     <p className="text-xs text-slate-500 truncate">{operator.person_name} • {operator.mobile_number}</p>
                   </div>
-                  <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full whitespace-nowrap flex-shrink-0 hover:bg-emerald-100 transition-colors">
-                    {operator.commission_percent}%
+                  <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full whitespace-nowrap shrink-0 hover:bg-emerald-100 transition-colors">
+                    {operator.commission_percent || operator.commission_percentage}%
                   </span>
                 </button>
               ))

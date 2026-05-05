@@ -31,14 +31,14 @@ WITH CHECK (true);
 CREATE UNIQUE INDEX IF NOT EXISTS unique_category_name_type 
 ON accounting_categories (name, category_type);
 
--- 7. Insert default income categories
+-- 8. Insert default income categories
 INSERT INTO accounting_categories (name, category_type, description, is_active) VALUES
 ('Ticket Booking', 'Income', 'Income from ticket bookings', true),
 ('Bus Rental', 'Income', 'Income from bus rentals', true),
 ('Other Income', 'Income', 'Other income sources', true)
 ON CONFLICT DO NOTHING;
 
--- 8. Insert default expense categories
+-- 9. Insert default expense categories
 INSERT INTO accounting_categories (name, category_type, description, is_active) VALUES
 ('Fuel', 'Expense', 'Fuel expenses', true),
 ('Driver Salary', 'Expense', 'Driver salary payments', true),
@@ -47,7 +47,7 @@ INSERT INTO accounting_categories (name, category_type, description, is_active) 
 ('Other Expense', 'Expense', 'Other expense types', true)
 ON CONFLICT DO NOTHING;
 
--- 9. Accounting Entries Table (Unified Income + Expense)
+-- 10. Accounting Entries Table (Income and Expense)
 CREATE TABLE IF NOT EXISTS accounting_entries (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   entry_type accounting_entry_type NOT NULL,

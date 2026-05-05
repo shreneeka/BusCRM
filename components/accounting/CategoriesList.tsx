@@ -1,8 +1,8 @@
 
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
-import { Search, Plus, Pencil, Trash2, X, Tag, FileText, ArrowRightLeft, ChevronLeft, ChevronRight } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Search, Pencil, Trash2, X, Tag, FileText, ArrowRightLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   AccountingCategory,
   createAccountingCategory,
@@ -48,14 +48,14 @@ export default function CategoriesList({
     });
 }, [initialCategories, searchTerm, typeFilter, statusFilter]);
 
-  // Reset to page 1 when search/filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, typeFilter, statusFilter]);
-
   const totalPages = Math.ceil(filteredCategories.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const currentCategories = filteredCategories.slice(startIndex, startIndex + itemsPerPage);
+
+  // Reset to page 1 if current page would be empty after filtering
+  if (currentPage > 1 && startIndex >= filteredCategories.length) {
+    setCurrentPage(1);
+  }
 
 return (
     <div className="saas-card bg-white flex flex-col h-full">

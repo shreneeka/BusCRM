@@ -289,6 +289,38 @@ export async function getCustomers() {
   return data || [];
 }
 
+export async function getCustomerById(customerId: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("customers")
+    .select("*")
+    .eq("id", customerId)
+    .single();
+
+  if (error) {
+    console.error("Error fetching customer:", error);
+    throw new Error("Customer not found");
+  }
+  
+  return data;
+}
+
+export async function getCityById(cityId: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("cities")
+    .select("*")
+    .eq("id", cityId)
+    .single();
+
+  if (error) {
+    console.error("Error fetching city:", error);
+    throw new Error("City not found");
+  }
+  
+  return data;
+}
+
 export async function getCities() {
   const supabase = await createClient();
   const { data, error } = await supabase

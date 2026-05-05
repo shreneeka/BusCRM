@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   Search,
   Phone,
@@ -16,8 +17,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Settings,
-  Eye,
-  CreditCard,
 } from "lucide-react";
 import Link from "next/link";
 import { createOperator, updateOperator, deleteOperator } from "@/lib/actions/operators.actions";
@@ -47,6 +46,7 @@ export default function OperatorList({
 }: {
   initialOperators: Operator[];
 }) {
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
   const [operators, setOperators] = useState<Operator[]>(initialOperators);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -271,7 +271,6 @@ export default function OperatorList({
                   <th className="px-4 py-4 font-bold whitespace-nowrap">Mobile</th>
                   <th className="px-4 py-4 font-bold whitespace-nowrap">Commission</th>
                   <th className="px-4 py-4 font-bold whitespace-nowrap">Status</th>
-                  <th className="px-4 py-4 font-bold whitespace-nowrap">Settlements</th>
                   <th className="px-4 py-4 font-bold text-right whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
@@ -280,7 +279,7 @@ export default function OperatorList({
                   <tr
                     key={operator.id}
                     className="hover:bg-slate-50/80 transition-colors group cursor-pointer"
-                    onClick={() => window.location.href = `/operators/${operator.id}`}
+                    onClick={() => router.push(`/operators/${operator.id}`)}
                   >
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="flex items-center gap-2">
@@ -288,9 +287,9 @@ export default function OperatorList({
                           {(operator.name || "O").charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <span className="font-bold text-slate-800 text-sm block">
+                          <div className="font-bold text-slate-800 text-sm">
                             {operator.name || "Unknown Operator"}
-                          </span>
+                          </div>
                           <span className="text-xs text-slate-500">
                             Created: {new Date(operator.created_at).toLocaleDateString(
                               "en-IN",
@@ -337,17 +336,6 @@ export default function OperatorList({
                       </span>
                     </td>
 
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <Link
-                        href={`/operators/${operator.id}/settlements`}
-                        className="inline-flex items-center gap-2 px-2 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg transition-colors text-xs font-medium"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <CreditCard className="w-3.5 h-3.5" />
-                        View Settlements
-                      </Link>
-                    </td>
-
                     <td className="px-4 py-3 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity">
                         <button
@@ -368,14 +356,6 @@ export default function OperatorList({
                             <Settings className="w-4 h-4" />
                           )}
                         </button>
-                        <Link
-                          href={`/operators/${operator.id}`}
-                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="View Details"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Link>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();

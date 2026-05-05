@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   Bus,
@@ -10,7 +11,6 @@ import {
   Loader2,
   Filter,
   Trash2,
-  Eye,
   X,
   Phone,
   Clock,
@@ -23,6 +23,8 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import OperatorSettlementForm from "@/components/settlements/OperatorSettlementForm";
+import PartialPaymentModal from "@/components/tickets/PartialPaymentModal";
+import TicketEditModal from "@/components/tickets/TicketEditModal";
 
 interface Ticket {
   id: string;
@@ -96,6 +98,7 @@ export default function TicketListUpdated({
   setShowSettlementModal?: (show: boolean) => void;
 }) {
   const supabase = createClient();
+  const router = useRouter();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [operators, setOperators] = useState<Operator[]>([]);
   const [loading, setLoading] = useState(false);
@@ -103,7 +106,9 @@ export default function TicketListUpdated({
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [showAddSettlementModal, setShowAddSettlementModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
+  const [showPartialPaymentModal, setShowPartialPaymentModal] = useState(false);
+  const [selectedTicketForPayment, setSelectedTicketForPayment] = useState<Ticket | null>(null);
+  const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
 
   useEffect(() => {
     fetchTickets();
@@ -150,6 +155,7 @@ export default function TicketListUpdated({
           account_type,
           amount,
           operator_id,
+          payment_status,
           created_at,
           updated_at,
           operators (
@@ -165,8 +171,7 @@ export default function TicketListUpdated({
             paid_amount,
             remaining_amount,
             operator_payable,
-            commission_percentage,
-            is_paid
+            commission_percentage
           )
         `)
         .order("created_at", { ascending: false });
@@ -179,6 +184,15 @@ export default function TicketListUpdated({
       }
       
       console.log("Successfully fetched tickets:", data?.length || 0, "tickets");
+      
+      // Debug: Log settlement data for each ticket
+      data?.forEach(ticket => {
+        console.log(`Ticket ${ticket.ticket_number}:`, {
+          operator_settlements: ticket.operator_settlements,
+          settlement_count: ticket.operator_settlements?.length || 0
+        });
+      });
+      
       setTickets(data || []);
       setDbError(null);
     } catch (error) {
@@ -268,7 +282,26 @@ export default function TicketListUpdated({
   };
 
   const getSettlementStatusBadge = (ticket: Ticket) => {
+    console.log(`🔍 Getting status for ticket ${ticket.ticket_number}:`, {
+      payment_status: ticket.payment_status,
+      has_settlements: !!ticket.operator_settlements,
+      settlement_count: ticket.operator_settlements?.length || 0,
+      settlements: ticket.operator_settlements
+    });
+
+    // First check direct payment_status field
+    if (ticket.payment_status === 'paid') {
+      console.log(`✅ Ticket ${ticket.ticket_number} is PAID (direct status)`);
+      return (
+        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+          <CheckCircle2 className="w-3 h-3 mr-1" />
+          Paid
+        </span>
+      );
+    }
+
     if (!ticket.operator_settlements || ticket.operator_settlements.length === 0) {
+      console.log(`❌ No settlements found for ticket ${ticket.ticket_number}`);
       return (
         <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
           <AlertCircle className="w-3 h-3 mr-1" />
@@ -277,16 +310,37 @@ export default function TicketListUpdated({
       );
     }
 
-    const settlement = ticket.operator_settlements[0];
+    // Calculate total paid amount across all settlements
+    const totalPaidAmount = ticket.operator_settlements.reduce((sum, settlement) => {
+      return sum + (settlement.paid_amount || 0);
+    }, 0);
     
-    if (settlement.is_paid || settlement.payment_status === 'done') {
+    // Get the operator payable amount from the first settlement (should be consistent)
+    const operatorPayable = ticket.operator_settlements[0].operator_payable || ticket.amount;
+    
+    // Check if any settlement is marked as 'done'
+    const hasDoneSettlement = ticket.operator_settlements.some(s => s.payment_status === 'done');
+    
+    // Check if total paid amount covers the full operator payable amount
+    const isFullyPaid = totalPaidAmount >= operatorPayable || hasDoneSettlement;
+    
+    console.log(`💰 Payment calculation for ticket ${ticket.ticket_number}:`, {
+      totalPaidAmount,
+      operatorPayable,
+      hasDoneSettlement,
+      isFullyPaid
+    });
+    
+    if (isFullyPaid) {
+      console.log(`✅ Ticket ${ticket.ticket_number} is PAID`);
       return (
         <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
           <CheckCircle2 className="w-3 h-3 mr-1" />
           Paid
         </span>
       );
-    } else if (settlement.payment_status === 'partial') {
+    } else if (totalPaidAmount > 0) {
+      console.log(`⚠️ Ticket ${ticket.ticket_number} is PARTIAL PAID`);
       return (
         <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
           <AlertCircle className="w-3 h-3 mr-1" />
@@ -294,6 +348,7 @@ export default function TicketListUpdated({
         </span>
       );
     } else {
+      console.log(`❌ Ticket ${ticket.ticket_number} is UNPAID`);
       return (
         <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
           <AlertCircle className="w-3 h-3 mr-1" />
@@ -330,10 +385,28 @@ export default function TicketListUpdated({
   const handleSelectTicket = (ticketId: string) => {
     if (!selectedTickets || !setSelectedTickets) return;
     
+    const ticket = tickets.find(t => t.id === ticketId);
+    if (!ticket) return;
+    
     const newSelected = new Set(selectedTickets);
+    
     if (newSelected.has(ticketId)) {
+      // Unselecting ticket - always allowed
       newSelected.delete(ticketId);
     } else {
+      // Selecting ticket - check if same operator as already selected tickets
+      if (newSelected.size > 0) {
+        const selectedTicketIds = Array.from(newSelected);
+        const selectedTicketsData = tickets.filter(t => selectedTicketIds.includes(t.id));
+        const uniqueOperators = [...new Set(selectedTicketsData.map(t => t.operator_id))];
+        
+        if (!uniqueOperators.includes(ticket.operator_id)) {
+          const existingOperatorName = getOperatorName(uniqueOperators[0]);
+          const newOperatorName = getOperatorName(ticket.operator_id);
+          alert(`Cannot select tickets from different operators. Already selected tickets from ${existingOperatorName}. Please deselect those tickets first to select tickets from ${newOperatorName}.`);
+          return;
+        }
+      }
       newSelected.add(ticketId);
     }
     setSelectedTickets(newSelected);
@@ -345,6 +418,12 @@ export default function TicketListUpdated({
     if (selectedTickets.size === filteredTickets.length) {
       setSelectedTickets(new Set());
     } else {
+      // Check if all tickets belong to the same operator
+      const uniqueOperators = [...new Set(filteredTickets.map(t => t.operator_id))];
+      if (uniqueOperators.length > 1) {
+        alert("Cannot select all tickets as they belong to different operators. Please select tickets from one operator at a time.");
+        return;
+      }
       setSelectedTickets(new Set(filteredTickets.map(t => t.id)));
     }
   };
@@ -486,8 +565,15 @@ export default function TicketListUpdated({
                 <h4 className="text-sm font-medium text-gray-700 mb-3">Payment Information</h4>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-sm text-gray-500">Amount</p>
-                    <p className="font-medium text-lg">{formatCurrency(ticket.amount)}</p>
+                    <p className="text-sm text-gray-500">Ticket Amount</p>
+                    <p className="font-medium text-lg">
+                      {formatCurrency(ticket.amount)}
+                    </p>
+                    {ticket.operator_settlements && ticket.operator_settlements.length > 0 && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        {ticket.total_seats} seat{ticket.total_seats !== 1 ? 's' : ''}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Account Type</p>
@@ -547,10 +633,11 @@ export default function TicketListUpdated({
                 <th className="text-center py-3 px-2 font-medium text-gray-700 w-12">
                   <button
                     onClick={handleSelectAll}
-                    className="flex items-center justify-center text-gray-600 hover:text-blue-600 transition-colors"
+                    className="flex items-center justify-center text-gray-600 hover:text-blue-600 hover:bg-blue-50 p-1 rounded transition-colors"
+                    title={selectedTickets && selectedTickets.size === filteredTickets.length && filteredTickets.length > 0 ? "Deselect all tickets" : "Select all tickets"}
                   >
-                    {selectedTickets.size === filteredTickets.length && filteredTickets.length > 0 ? (
-                      <CheckSquare className="w-4 h-4" />
+                    {selectedTickets && selectedTickets.size === filteredTickets.length && filteredTickets.length > 0 ? (
+                      <CheckSquare className="w-4 h-4 text-blue-600" />
                     ) : (
                       <Square className="w-4 h-4" />
                     )}
@@ -568,32 +655,56 @@ export default function TicketListUpdated({
             </thead>
             <tbody>
               {filteredTickets.map((ticket) => (
-                <tr key={ticket.id} className="border-b border-gray-100 hover:bg-gray-50">
+                <tr 
+                  key={ticket.id} 
+                  className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${
+                    selectedTickets?.has(ticket.id) ? 'bg-blue-50 border-blue-200' : ''
+                  }`} 
+                  title="Use Edit button for ticket edits (only available on Tickets page, not Operators page)"
+                >
                   <td className="py-3 px-2 text-center">
                     <button
-                      onClick={() => handleSelectTicket(ticket.id)}
-                      className="flex items-center justify-center text-gray-600 hover:text-blue-600 transition-colors"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSelectTicket(ticket.id);
+                      }}
+                      className="flex items-center justify-center text-gray-600 hover:text-blue-600 hover:bg-blue-50 p-1 rounded transition-colors"
+                      title={selectedTickets?.has(ticket.id) ? "Deselect ticket" : "Select ticket for settlement"}
                     >
-                      {selectedTickets.has(ticket.id) ? (
-                        <CheckSquare className="w-4 h-4" />
+                      {selectedTickets?.has(ticket.id) ? (
+                        <CheckSquare className="w-4 h-4 text-blue-600" />
                       ) : (
                         <Square className="w-4 h-4" />
                       )}
                     </button>
                   </td>
                   <td className="py-3 px-4">
-                    <div className="font-medium text-gray-900 text-xs">{ticket.ticket_number}</div>
-                    <div className="text-xs text-gray-500">{ticket.bus_number}</div>
+                    <div 
+                      className="font-medium text-gray-900 text-xs transition-colors cursor-pointer hover:text-blue-600" 
+                      onClick={() => {
+                        setSelectedTicket(ticket);
+                        setShowDetails(true);
+                      }}
+                    >
+                      {ticket.ticket_number}
+                    </div>
                   </td>
                   <td className="py-3 px-4">
-                    <div className="font-medium text-gray-900 text-xs">{ticket.passenger_name}</div>
-                    <div className="text-xs text-gray-500 flex items-center gap-1">
-                      <Phone className="w-3 h-3" />
+                    <div className="font-medium text-gray-900 text-xs">
+                      {ticket.passenger_name}
+                    </div>
+                    <div className="text-xs text-gray-500">
                       {ticket.mobile_number}
                     </div>
                   </td>
                   <td className="py-3 px-4">
-                    <div className="text-xs">
+                    <div 
+                      className="text-xs transition-colors block cursor-pointer hover:text-blue-600"
+                      onClick={() => {
+                        setSelectedTicket(ticket);
+                        setShowDetails(true);
+                      }}
+                    >
                       <div className="flex items-center gap-1">
                         <MapPin className="w-3 h-3 text-gray-400" />
                         {ticket.pickup_city}
@@ -606,7 +717,13 @@ export default function TicketListUpdated({
                     </div>
                   </td>
                   <td className="py-3 px-4">
-                    <div className="text-xs">
+                    <div 
+                      className="text-xs block cursor-pointer hover:text-blue-600"
+                      onClick={() => {
+                        setSelectedTicket(ticket);
+                        setShowDetails(true);
+                      }}
+                    >
                       <div className="flex items-center gap-1">
                         <Calendar className="w-3 h-3 text-gray-400" />
                         {formatDate(ticket.journey_date)}
@@ -618,46 +735,67 @@ export default function TicketListUpdated({
                     </div>
                   </td>
                   <td className="py-3 px-4">
-                    <div className="font-medium text-gray-900 text-xs">
+                    <button
+                      onClick={() => {
+                        // Check if payment is already done before opening settlement modal
+                        let isPaymentDone = false;
+                        
+                        // First check if ticket has direct payment_status field
+                        if (ticket.payment_status === 'paid') {
+                          isPaymentDone = true;
+                        }
+                        // Also check settlements if they exist
+                        else if (ticket.operator_settlements && ticket.operator_settlements.length > 0) {
+                          const hasDoneSettlement = ticket.operator_settlements.some(s => s.payment_status === 'done');
+                          const totalPaidAmount = ticket.operator_settlements.reduce((sum, settlement) => {
+                            return sum + (settlement.paid_amount || 0);
+                          }, 0);
+                          const operatorPayable = ticket.operator_settlements[0].operator_payable || ticket.amount;
+                          isPaymentDone = totalPaidAmount >= operatorPayable || hasDoneSettlement;
+                        }
+                        
+                        if (isPaymentDone) {
+                          alert('Payment is already completed for this ticket. Settlement cannot be processed.');
+                          return;
+                        }
+                        
+                        // Clear existing selection and select this ticket
+                        setSelectedTickets(new Set([ticket.id]));
+                        // Open settlement modal
+                        setShowAddSettlementModal(true);
+                      }}
+                      className="font-medium text-gray-900 text-xs text-left"
+                      title="Click to open operator settlement"
+                    >
                       {getOperatorName(ticket.operator_id)}
-                    </div>
+                    </button>
                                       </td>
                   <td className="py-3 px-4">
-                    <div className="font-medium text-gray-900 text-xs">{formatCurrency(ticket.amount)}</div>
+                    <div className="font-medium text-gray-900 text-xs">
+                      {formatCurrency(ticket.amount)}
+                    </div>
                     <div className="text-xs text-gray-500">{ticket.total_seats} seats</div>
                   </td>
                   <td className="py-3 px-4">
                     {getSettlementStatusBadge(ticket)}
-                    {ticket.operator_settlements && ticket.operator_settlements.length > 0 && ticket.operator_settlements[0].payment_status === 'partial' && (
-                      <div className="mt-1 text-xs text-orange-600">
-                        Remaining: {formatCurrency(ticket.operator_settlements[0].remaining_amount || 0)}
-                      </div>
-                    )}
                   </td>
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => {
-                          setSelectedTicket(ticket);
-                          setShowDetails(true);
-                        }}
-                        className="p-1 text-blue-600 hover:bg-blue-50 rounded"
-                        title="View Details"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSelectedTicket(ticket);
-                          setShowEditModal(true);
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingTicket(ticket);
                         }}
                         className="p-1 text-green-600 hover:bg-green-50 rounded"
-                        title="Edit Ticket"
+                        title="Edit Ticket (inline)"
                       >
                         <Edit className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => deleteTicket(ticket.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteTicket(ticket.id);
+                        }}
                         className="p-1 text-red-600 hover:bg-red-50 rounded"
                         title="Delete"
                       >
@@ -695,6 +833,22 @@ export default function TicketListUpdated({
         />
       )}
 
+      {/* Partial Payment Modal */}
+      {showPartialPaymentModal && selectedTicketForPayment && (
+        <PartialPaymentModal 
+          ticket={selectedTicketForPayment}
+          onClose={() => {
+            setShowPartialPaymentModal(false);
+            setSelectedTicketForPayment(null);
+          }}
+          onSuccess={() => {
+            setShowPartialPaymentModal(false);
+            setSelectedTicketForPayment(null);
+            fetchTickets();
+          }}
+        />
+      )}
+
       {/* Operator Settlement Form */}
       {showAddSettlementModal && (
         <OperatorSettlementForm 
@@ -706,7 +860,21 @@ export default function TicketListUpdated({
           selectedTicketIds={selectedTickets ? Array.from(selectedTickets) : []}
         />
       )}
-    </div>
+
+      {/* Ticket Edit Modal */}
+      {editingTicket && (
+        <TicketEditModal
+          ticket={editingTicket}
+          isOpen={true}
+          onClose={() => setEditingTicket(null)}
+          onSuccess={() => {
+            setEditingTicket(null);
+            fetchTickets();
+          }}
+        />
+      )}
+
+      </div>
   );
 }
 

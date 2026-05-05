@@ -116,20 +116,33 @@ export default function TicketTabs({
           
           <div className="flex items-center gap-2">
             {selectedTickets && selectedTickets.size > 0 && (
-              <button
-                onClick={() => setShowSettlementModal(true)}
-                className="px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 transition-colors flex items-center justify-center gap-2 text-sm"
-              >
-                <CreditCard className="w-3 h-3" />
-                Settle {selectedTickets.size} Ticket{selectedTickets.size > 1 ? 's' : ''}
-              </button>
+              <>
+                <span className="text-sm text-gray-600 font-medium">
+                  {selectedTickets.size} ticket{selectedTickets.size > 1 ? 's' : ''} selected
+                </span>
+                <button
+                  onClick={() => setShowSettlementModal(true)}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all duration-200 flex items-center justify-center gap-2 text-sm font-medium shadow-sm hover:shadow-md transform hover:scale-105"
+                  title={`Settle ${selectedTickets.size} selected ticket${selectedTickets.size > 1 ? 's' : ''}`}
+                >
+                  <CreditCard className="w-4 h-4" />
+                  Settle Selected
+                </button>
+                <button
+                  onClick={() => setSelectedTickets(new Set())}
+                  className="px-3 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors flex items-center justify-center gap-2 text-sm font-medium"
+                  title="Clear selection"
+                >
+                  Clear
+                </button>
+              </>
             )}
             <button
               type="button"
               onClick={() => setIsAddOpen(true)}
-              className="btn-brand flex items-center gap-1.5 px-3 py-1.5 text-sm"
+              className="btn-brand flex items-center gap-1.5 px-4 py-2 text-sm"
             >
-              <Plus className="w-3 h-3" />
+              <Plus className="w-4 h-4" />
               Add Tickets
             </button>
           </div>

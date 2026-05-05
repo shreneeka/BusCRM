@@ -94,6 +94,7 @@ export async function getAccountingEntries(): Promise<AccountingEntry[]> {
   }
 
   console.log(`Found ${data?.length || 0} accounting entries`);
+  console.log("Sample entries:", data?.slice(0, 3));
 
   return (data || []).map((entry: any) => ({
     id: entry.id,

@@ -1,17 +1,19 @@
-# Ticket Booking Form Update TODO
+# Ticket Inline Edit Implementation
 
-## Status: In Progress
+## Plan Steps (Approved by user)
+- [x] **Step 1:** Create TODO.md with approved plan breakdown
+- [x] **Step 2:** Update components/tickets/TicketListUpdated.tsx 
+  - Import TicketEditModal
+  - Add editingTicket state
+  - Replace router.push with setEditingTicket(ticket)
+  - Add TicketEditModal render with onSuccess → fetchTickets()
+  - Fixed import duplicate and "xuse client" typo
+- [ ] **Step 3:** Test edit functionality (modal opens, saves, refreshes list)
+- [ ] **Step 4:** Verify navigation to /tickets/[id]/edit/ is deprecated (no longer used from list)
+- [ ] **Step 5:** Complete task with attempt_completion
 
-**Completed:**
-- [ ]
+## Current Progress
+✅ Plan approved and TODO created
 
-**Todo Steps:**
-1. [x] Read OperatorSearchSelector.tsx to confirm props/interface.
-2. [x] Edit components/tickets/TicketBookingForm.tsx: Add imports, states, remove old operator fields/functions.
-3. [x] Edit TicketBookingForm.tsx: Adjust grids, add OperatorSearchSelector, new payment grid.
-4. [x] Edit validation and handleSubmit for new fields/removed Payment Received By.
-5. [ ] Test form submission: Verify operator_id saves, name from DB.
-6. [ ] attempt_completion 
-
-**Next:** Step 1 - Read OperatorSearchSelector.
+Next: Implement Step 2 (edit TicketListUpdated.tsx)
 

@@ -194,6 +194,10 @@ function MobileNumberSelector({
   const [isOpen, setIsOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
+  const normalized = mobileNumber.replace(/\D/g, "");
+  const isMobileTooShort = normalized.length > 0 && normalized.length < 10;
+  const isMobileInvalidLength = normalized.length > 0 && normalized.length !== 10;
+
   useEffect(() => {
     setSearch(mobileNumber);
   }, [mobileNumber]);
@@ -282,6 +286,7 @@ export default function TicketBookingForm({ onSuccess }: { onSuccess?: () => voi
   const [pickupLocation, setPickupLocation] = useState<City | null>(null);
   const [dropLocation, setDropLocation] = useState<City | null>(null);
   const [journeyDate, setJourneyDate] = useState("");
+  const [bookingDate, setBookingDate] = useState("");
   const [seatNumbers, setSeatNumbers] = useState("");
   const [totalSeats, setTotalSeats] = useState(1);
   const [pickupTime, setPickupTime] = useState("");
@@ -293,7 +298,7 @@ export default function TicketBookingForm({ onSuccess }: { onSuccess?: () => voi
   const [cities, setCities] = useState<City[]>([]);
 
   // Payment Details
-  const [accountType, setAccountType] = useState<"Cash" | "UPI">("Cash");
+  const [accountType, setAccountType] = useState<"Cash" | "UPI" | "Other">("Cash");
   const [selectedAccount, setSelectedAccount] = useState("");
   const [amount, setAmount] = useState("");
   const [operators, setOperators] = useState<Operator[]>([]); 
@@ -309,6 +314,11 @@ export default function TicketBookingForm({ onSuccess }: { onSuccess?: () => voi
   const [showSuccess, setShowSuccess] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const todayStr = new Date().toISOString().split("T")[0];
+
+  // Initialize booking date with today's date
+  useEffect(() => {
+    setBookingDate(new Date().toISOString().split("T")[0]);
+  }, []);
 
   const formatPassengerName = (name: string) =>
     name
@@ -389,11 +399,13 @@ const fetchCustomerSuggestions = async (digits: string) => {
     const newErrors: string[] = [];
 
     if (!passengerName.trim()) newErrors.push("Passenger name is required");
-    if (!mobileNumber.trim() || mobileNumber.length !== 10)
-      newErrors.push("Mobile number must be exactly 10 digits");
-    if (!operatorId) newErrors.push("Operators Database name is required"); 
+    if (!mobileNumber.trim()) newErrors.push("Customer mobile number is required");
+    else if (mobileNumber.length !== 10) newErrors.push("Customer mobile number must be exactly 10 digits");
+    // Operator is optional as per requirement
+    // if (!operatorId) newErrors.push("Operator is required");
     if (!pickupLocation) newErrors.push("Pickup location is required");
     if (!dropLocation) newErrors.push("Drop location is required");
+    if (!bookingDate) newErrors.push("Booking date is required");
     if (!journeyDate) newErrors.push("Journey date is required");
     if (!seatNumbers.trim()) newErrors.push("Seat numbers are required");
     if (totalSeats < 1 || totalSeats > 70)
@@ -428,21 +440,21 @@ const fetchCustomerSuggestions = async (digits: string) => {
         passenger_name: formattedName,
         mobile_number: `+91 ${mobileNumber}`,
         pickup_city: pickupLocation?.name || "",
-        pickup_area: pickupLocation?.name || "",
+        pickup_location: pickupLocation?.name || "",
         drop_city: dropLocation?.name || "",
         drop_location: dropLocation?.name || "",
         journey_date: journeyDate,
-        booking_date: new Date().toISOString().split("T")[0],
+        booking_date: bookingDate,
         seat_numbers: seatArray,
         total_seats: totalSeats,
         pickup_time: pickupTime,
         bus_number: busNumber || "",
         travel_type: travelType,
         ticket_number: ticketNumber,
-        account_id: selectedAccount || "",
+        account_id: selectedAccount && selectedAccount.trim() ? selectedAccount : null,
         account_type: accountType,
         amount: parseFloat(amount),
-        operator_id: operatorId,
+        operator_id: operatorId && operatorId.trim() ? operatorId : null,
         operator_name: operators.find(op => op.id === operatorId)?.name,
       }); 
 
@@ -453,6 +465,7 @@ const fetchCustomerSuggestions = async (digits: string) => {
       setPickupLocation(null);
       setDropLocation(null);
       setJourneyDate(""); 
+      setBookingDate(new Date().toISOString().split("T")[0]); 
       setSeatNumbers("");
       setTotalSeats(1);
       setPickupTime("");
@@ -478,7 +491,7 @@ const fetchCustomerSuggestions = async (digits: string) => {
   }
 
 return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4 max-w-full overflow-visible">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-1 max-w-full overflow-visible">
       {errors.length > 0 && (
         <div className="rounded-lg border border-rose-100 bg-rose-50 p-3 text-sm text-rose-700">
           <strong className="block font-semibold mb-1">Please fix the following:</strong>
@@ -496,8 +509,17 @@ return (
         </div>
       )}
 
-    {/* Customer & Operator Mobile - 2 columns */}
-    <div className="grid grid-cols-1 gap-3">
+      {/* Operator Name - 1 field */}
+      <div className="p-1">
+        <OperatorSearchSelector
+          label="Operator Name *"
+          selectedOperatorId={operatorId}
+          onSelect={(id) => setOperatorId(id ?? null)}
+        />
+      </div>
+
+      {/* Customer Mobile & Passenger Name - 2 columns */}
+      <div className="grid grid-cols-2 gap-1 p-1">
         <MobileNumberSelector
           label="Customer Mobile"
           mobileNumber={mobileNumber}
@@ -508,12 +530,7 @@ return (
           onCustomerSelect={handleCustomerSelect}
           customers={customerSuggestions}
           formatPassengerName={formatPassengerName}
-        /> 
-
-      </div> 
-
-  {/* Passenger Name */}
-      <div className="grid grid-cols-1 gap-3"> 
+        />
         <div>
           <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
             Passenger Name *
@@ -525,25 +542,20 @@ return (
               type="text"
               value={passengerName}
               onChange={(e) => setPassengerName(e.target.value)}
-              className="input-primary pl-10 w-full text-sm py-2"
+              className="pl-10 w-full text-sm py-2 rounded-lg border border-slate-300 bg-slate-50 shadow-sm hover:bg-slate-100 hover:shadow-md focus:bg-white focus:shadow-md focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all outline-none"
               placeholder="Full Name"
             />
           </div>
         </div>
-
       </div>
-
-      {/* Operators Database name */}
-      <div>
-        <OperatorSearchSelector
-          label="Operators Database name *"
-          selectedOperatorId={operatorId}
-          onSelect={(id) => setOperatorId(id || "")}
-        />
-      </div> 
+      {mobileNumber.trim().length > 0 && mobileNumber.trim().length !== 10 && (
+        <div className="text-[11px] text-rose-600 mt-1">
+          Customer mobile must be exactly 10 digits.
+        </div>
+      )}
 
       {/* Route Details - 2 columns */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-1 p-1">
         <CitySelector
           label="From"
           name="pickup_location_id"
@@ -564,8 +576,25 @@ return (
         />
       </div>
 
-      {/* Date & Time - 2 columns */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* Date & Time fields */}
+      <div className="grid grid-cols-3 gap-1 p-1">
+        <div>
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
+            Booking Date *
+          </label>
+          <div className="relative">
+            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+            <input
+              required
+              type="date"
+              value={bookingDate}
+              onChange={(e) => setBookingDate(e.target.value)}
+              max={todayStr}
+              className="input-primary pl-8 w-full text-sm py-2 rounded-lg border border-slate-300 bg-slate-50 shadow-sm hover:bg-slate-100 hover:shadow-md focus:bg-white focus:shadow-md focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all outline-none"
+            />
+          </div>
+        </div>
+
         <div>
           <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
             Journey Date *
@@ -578,7 +607,7 @@ return (
               value={journeyDate}
               onChange={(e) => setJourneyDate(e.target.value)}
               min={todayStr}
-              className="input-primary pl-8 w-full text-sm py-2"
+              className="input-primary pl-8 w-full text-sm py-2 rounded-lg border border-slate-300 bg-slate-50 shadow-sm hover:bg-slate-100 hover:shadow-md focus:bg-white focus:shadow-md focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all outline-none"
             />
           </div>
         </div>
@@ -594,14 +623,14 @@ return (
               type="time"
               value={pickupTime}
               onChange={(e) => setPickupTime(e.target.value)}
-              className="input-primary pl-8 w-full text-sm py-2"
+              className="input-primary pl-8 w-full text-sm py-2 rounded-lg border border-slate-300 bg-slate-50 shadow-sm hover:bg-slate-100 hover:shadow-md focus:bg-white focus:shadow-md focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all outline-none"
             />
           </div>
         </div>
       </div>
 
       {/* Seat Details - 2 columns */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-1 p-1">
         <div>
           <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
             Seat Numbers *
@@ -613,7 +642,7 @@ return (
               type="text"
               value={seatNumbers}
               onChange={(e) => setSeatNumbers(e.target.value)}
-              className="input-primary pl-8 w-full text-sm py-2"
+              className="pl-8 w-full text-sm py-2 rounded-lg border border-slate-300 bg-slate-50 shadow-sm hover:bg-slate-100 hover:shadow-md focus:bg-white focus:shadow-md focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all outline-none"
               placeholder="A1, A2, B1"
             />
           </div>
@@ -623,20 +652,22 @@ return (
           <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
             Total Seats *
           </label>
-          <input
-            required
-            type="number"
-            value={totalSeats}
-            onChange={(e) => setTotalSeats(Math.max(1, Math.min(70, parseInt(e.target.value) || 1)))}
-            min={1}
-            max={70}
-            className="input-primary w-full text-sm py-2"
-          />
+          <div className="relative">
+            <Users className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="number"
+              value={totalSeats}
+              onChange={(e) => setTotalSeats(Math.max(1, Math.min(70, parseInt(e.target.value) || 1)))}
+              min={1}
+              max={70}
+              className="pl-8 w-full text-sm py-2 rounded-lg border border-slate-300 bg-slate-50 shadow-sm hover:bg-slate-100 hover:shadow-md focus:bg-white focus:shadow-md focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all outline-none"
+            />
+          </div>
         </div>
       </div>
 
       {/* Bus Details - 2 columns */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-1 p-1">
         <div>
           <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
             Bus Number
@@ -647,7 +678,7 @@ return (
               type="text"
               value={busNumber}
               onChange={(e) => setBusNumber(e.target.value)}
-              className="input-primary pl-8 w-full text-sm py-2"
+              className="pl-8 w-full text-sm py-2 rounded-lg border border-slate-300 bg-slate-50 shadow-sm hover:bg-slate-100 hover:shadow-md focus:bg-white focus:shadow-md focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all outline-none"
               placeholder="DL-01-AB-1234"
             />
           </div>
@@ -661,7 +692,7 @@ return (
             required
             value={travelType}
             onChange={(e) => setTravelType(e.target.value as "AC" | "Non-AC")}
-            className="input-primary w-full text-sm py-2"
+            className="w-full text-sm py-2 rounded-lg border border-slate-300 bg-slate-50 shadow-sm hover:bg-slate-100 hover:shadow-md focus:bg-white focus:shadow-md focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all outline-none appearance-none cursor-pointer"
           >
             <option value="Non-AC">Non-AC</option>
             <option value="AC">AC</option>
@@ -670,7 +701,7 @@ return (
       </div>
 
       {/* Ticket & Payment - 2 columns */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-3 bg-slate-50 shadow-sm hover:bg-slate-100 hover:shadow-md focus:bg-white focus:shadow-md transition-all p-3 rounded-lg">
         <div>
           <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
             Ticket Number *
@@ -682,31 +713,15 @@ return (
               type="text"
               value={ticketNumber}
               onChange={(e) => setTicketNumber(e.target.value)}
-              className="input-primary pl-8 w-full text-sm py-2"
+              className="pl-8 w-full text-sm py-2 rounded-lg border border-slate-300 bg-slate-50 shadow-sm hover:bg-slate-100 hover:shadow-md focus:bg-white focus:shadow-md focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all outline-none"
               placeholder="TKT-001"
             />
           </div>
         </div>
-
-        <div>
-          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
-            Payment Type *
-          </label>
-          <select
-            required
-            value={accountType}
-            onChange={(e) => setAccountType(e.target.value as "Cash" | "UPI")}
-            className="input-primary w-full text-sm py-2"
-          >
-            <option value="Cash">Cash</option>
-            <option value="UPI">UPI</option>
-          </select>
-        </div>
       </div>
 
-      {/* Account Selection - Full width */}
       {/* Account Selection & Amount - 2 columns */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-1 p-1">
         <div>
           <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
             Account Selection
@@ -714,16 +729,13 @@ return (
           <div className="relative">
             <Wallet className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <select
-              value={selectedAccount}
-              onChange={(e) => setSelectedAccount(e.target.value)}
-              className="input-primary pl-9 w-full text-sm py-2 appearance-none"
+              value={accountType}
+              onChange={(e) => setAccountType(e.target.value as "Cash" | "UPI" | "Other")}
+              className="pl-9 w-full text-sm py-2 rounded-lg border border-slate-300 bg-slate-50 shadow-sm hover:bg-slate-100 hover:shadow-md focus:bg-white focus:shadow-md focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all outline-none appearance-none cursor-pointer"
             >
-              <option value="">Select Account</option>
-              {accounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.name} ({account.type})
-                </option>
-              ))}
+              <option value="Cash">Cash</option>
+              <option value="UPI">UPI</option>
+              <option value="Other">Other</option>
             </select>
           </div>
         </div>
@@ -743,7 +755,7 @@ return (
               onChange={(e) => setAmount(e.target.value)}
               min={0}
               step={0.01}
-              className="input-primary pl-8 w-full text-sm py-2"
+              className="pl-8 w-full text-sm py-2 rounded-lg border border-slate-300 bg-slate-50 shadow-sm hover:bg-slate-100 hover:shadow-md focus:bg-white focus:shadow-md focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all outline-none"
               placeholder="0.00"
             />
           </div>

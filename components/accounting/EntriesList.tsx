@@ -1,15 +1,12 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState } from "react";
 import {
   Search,
-  Plus,
   Filter,
-  ArrowUpDown,
   Pencil,
   Trash2,
   X,
-  Eye,
   Wallet,
   Tag,
   IndianRupee,
@@ -38,7 +35,7 @@ export default function EntriesList({
   addType: externalAddType,
   setAddType: externalSetAddType,
   isAddOpen: externalIsAddOpen,
-  setIsAddOpen: externalSetIsAddOpen,
+  setIsAddOpen: externalSetIsOpen,
 }: {
   initialEntries: AccountingEntry[];
   accounts: AccountSummary[];
@@ -61,7 +58,7 @@ export default function EntriesList({
   const itemsPerPage = 15;
 
   const isAddOpen = externalIsAddOpen ?? false;
-  const setIsAddOpen = externalSetIsAddOpen ?? (() => {});
+  const setIsAddOpen = externalSetIsOpen ?? (() => {});
   const addType = externalAddType ?? "Income";
   const setAddType = externalSetAddType ?? (() => {});
 
@@ -119,30 +116,14 @@ const entryDate = new Date(entry.entry_date);
     dateTo,
   ]);
 
-// Reset to page 1 when search/filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, entryTypeFilter, accountFilter, categoryFilter, dateFrom, dateTo]);
-
   const totalPages = Math.ceil(filteredEntries.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const currentEntries = filteredEntries.slice(startIndex, startIndex + itemsPerPage);
 
-  const totals = useMemo(() => {
-    const totalIncome = filteredEntries
-      .filter((entry) => entry.entry_type === "Income")
-      .reduce((sum, entry) => sum + Number(entry.amount), 0);
-    const totalExpense = filteredEntries
-      .filter((entry) => entry.entry_type === "Expense")
-      .reduce((sum, entry) => sum + Number(entry.amount), 0);
-
-    return {
-      totalIncome,
-      totalExpense,
-      netAmount: totalIncome - totalExpense,
-      totalTransactions: filteredEntries.length,
-    };
-  }, [filteredEntries]);
+  // Reset to page 1 if current page would be empty after filtering
+  if (currentPage > 1 && startIndex >= filteredEntries.length) {
+    setCurrentPage(1);
+  }
 
 return (
     <div className="saas-card bg-white flex flex-col h-full">
@@ -260,7 +241,8 @@ return (
               currentEntries.map((entry) => (
                 <tr
                   key={entry.id}
-                  className="hover:bg-slate-50 transition-colors"
+                  className="hover:bg-slate-50 transition-colors cursor-pointer"
+                  onClick={() => window.location.href = `/accounting/entries/${entry.id}`}
                 >
                   <td className="px-4 py-4 text-slate-700 text-sm">
                     {new Date(entry.entry_date).toLocaleDateString("en-GB")}
@@ -292,28 +274,20 @@ return (
                   >
                     ₹{entry.amount.toFixed(2)}
                   </td>
-                  <td className="px-4 py-4 text-slate-600 text-sm">
-                    {entry.remarks || "-"}
-                  </td>
-<td className="px-4 py-4">
+                  <td className="px-4 py-4">
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => setViewingEntry(entry)}
-                        className="text-slate-500 hover:text-slate-900"
-                        title="View"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEditingEntry(entry)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingEntry(entry);
+                        }}
                         className="text-slate-500 hover:text-slate-900"
                         title="Edit"
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
-                      <form action={deleteAccountingEntry}>
+                      <form action={deleteAccountingEntry} onSubmit={(e) => e.stopPropagation()}>
                         <input type="hidden" name="id" value={entry.id} />
                         <button
                           type="submit"
@@ -593,7 +567,7 @@ return (
       )}
 
       {viewingEntry && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-slate-900/40 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-4 shadow-xl overflow-visible">
             <div className="flex items-center justify-between gap-3 mb-3">
               <div>
@@ -612,11 +586,7 @@ return (
             <div className="grid gap-3">
               <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
                 <div className={`p-2 rounded-lg ${viewingEntry.entry_type === "Income" ? "bg-emerald-100" : "bg-rose-100"}`}>
-                  {viewingEntry.entry_type === "Income" ? (
-                    <IndianRupee className="w-5 h-5 text-emerald-600" />
-                  ) : (
-                    <IndianRupee className="w-5 h-5 text-rose-600" />
-                  )}
+                  <IndianRupee className={`w-5 h-5 ${viewingEntry.entry_type === "Income" ? "text-emerald-600" : "text-rose-600"}`} />
                 </div>
                 <div>
                   <span className={`text-lg font-bold ${viewingEntry.entry_type === "Income" ? "text-emerald-600" : "text-rose-600"}`}>
@@ -626,46 +596,49 @@ return (
                 </div>
               </div>
               
-              <div className="grid gap-2">
-                <div className="flex items-center gap-2">
-                  <Wallet className="w-4 h-4 text-slate-400" />
-                  <span className="text-xs font-semibold text-slate-500 uppercase">Account:</span>
-                  <span className="text-sm text-slate-700">{viewingEntry.account?.name || "-"}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Tag className="w-4 h-4 text-slate-400" />
-                  <span className="text-xs font-semibold text-slate-500 uppercase">Category:</span>
-                  <span className="text-sm text-slate-700">{viewingEntry.category?.name || "-"}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-slate-400" />
-                  <span className="text-xs font-semibold text-slate-500 uppercase">Date:</span>
-                  <span className="text-sm text-slate-700">{new Date(viewingEntry.entry_date).toLocaleDateString("en-GB")}</span>
-                </div>
-{viewingEntry.description && (
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-slate-400" />
-                    <span className="text-xs font-semibold text-slate-500 uppercase">Remarks:</span>
-                    <span className="text-sm text-slate-700">{viewingEntry.description}</span>
+                    <Wallet className="w-4 h-4 text-slate-400" />
+                    <span className="font-semibold text-slate-700">Account:</span>
+                    <span className="text-slate-600">{viewingEntry.account?.name || "-"}</span>
                   </div>
-                )}
-                {/* Ticket Link Info */}
-                {viewingEntry.ticket && (
-                  <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-100">
-                    <Link className="w-4 h-4 text-[#3da9d4]" />
-                    <span className="text-xs font-semibold text-[#3da9d4] uppercase">Linked Ticket:</span>
-                    <a
-                      href={`/tickets/${viewingEntry.ticket.id}`}
-                      className="text-sm font-bold text-[#3da9d4] hover:underline flex items-center gap-1"
-                    >
-                      {viewingEntry.ticket.ticket_number}
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                    <span className="text-xs text-slate-500">
-                      ({viewingEntry.ticket.passenger_name})
-                    </span>
+                  <div className="flex items-center gap-2">
+                    <Tag className="w-4 h-4 text-slate-400" />
+                    <span className="font-semibold text-slate-700">Category:</span>
+                    <span className="text-slate-600">{viewingEntry.category?.name || "-"}</span>
                   </div>
-                )}
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-slate-400" />
+                    <span className="font-semibold text-slate-700">Date:</span>
+                    <span className="text-slate-600">{new Date(viewingEntry.entry_date).toLocaleDateString("en-GB")}</span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {viewingEntry.description && (
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-slate-400" />
+                      <span className="font-semibold text-slate-700">Remarks:</span>
+                      <span className="text-slate-600">{viewingEntry.description}</span>
+                    </div>
+                  )}
+                  {viewingEntry.ticket && (
+                    <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                      <Link className="w-4 h-4 text-[#3da9d4]" />
+                      <span className="font-semibold text-[#3da9d4]">Linked Ticket:</span>
+                      <a
+                        href={`/tickets/${viewingEntry.ticket.id}`}
+                        className="text-[#3da9d4] hover:underline flex items-center gap-1"
+                      >
+                        {viewingEntry.ticket.ticket_number}
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                      <span className="text-xs text-slate-500">
+                        ({viewingEntry.ticket.passenger_name})
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
               
               <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
