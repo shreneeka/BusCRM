@@ -1,14 +1,17 @@
-# TODO - Accounting Module Updates
+# Ticket Booking Form Update TODO
 
-## Task: Update Accounting Module Entries/Accounts/Categories to Match Enquiry Module UI
+## Status: In Progress
 
-### Plan:
+**Completed:**
+- [ ]
 
-1. [IN PROGRESS] Update AccountingTabs.tsx - Add Main/Auto Closed tabs at the top
-2. [ ] Update EntriesList.tsx - Add Main/Auto Closed tab logic
-3. [ ] Add link type - Display linked ticket info in View modal
-4. [ ] UI Updates - Add border-t-4 accent styling (#3da9d4)
+**Todo Steps:**
+1. [x] Read OperatorSearchSelector.tsx to confirm props/interface.
+2. [x] Edit components/tickets/TicketBookingForm.tsx: Add imports, states, remove old operator fields/functions.
+3. [x] Edit TicketBookingForm.tsx: Adjust grids, add OperatorSearchSelector, new payment grid.
+4. [x] Edit validation and handleSubmit for new fields/removed Payment Received By.
+5. [ ] Test form submission: Verify operator_id saves, name from DB.
+6. [ ] attempt_completion 
 
-### Reference:
-- Enquiry module (LeadList.tsx) - Main/Auto Closed tabs
-- Tickets view page - Rich detail UI with linked views
+**Next:** Step 1 - Read OperatorSearchSelector.
+

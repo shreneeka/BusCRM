@@ -1,9 +1,6 @@
-import PaymentCollectionTabs from "@/components/operators/PaymentCollectionTabs";
+import { redirect } from "next/navigation";
 
 export default function PaymentsPage() {
-  return (
-    <div className="h-full flex flex-col">
-      <PaymentCollectionTabs />
-    </div>
-  );
+  // Redirect to settlements since payment module was removed
+  redirect("/settlements");
 }

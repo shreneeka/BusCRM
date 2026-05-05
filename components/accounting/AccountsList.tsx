@@ -55,7 +55,7 @@ export default function AccountsList({
 return (
     <div className="saas-card bg-white flex flex-col h-full">
       {/* Filters */}
-      <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row gap-2 items-center bg-slate-50/50 shrink-0">
+      <div className="p-3 border-b border-slate-100 flex flex-col sm:flex-row gap-2 items-center bg-slate-50/50 shrink-0">
         <div className="relative w-full sm:flex-1 sm:w-48">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
@@ -116,20 +116,20 @@ return (
                   key={account.id}
                   className="hover:bg-slate-50 transition-colors"
                 >
-                  <td className="px-4 py-4 font-medium text-slate-700">
+                  <td className="px-4 py-4 font-medium text-slate-700 text-sm">
                     {account.name}
                   </td>
-                  <td className="px-4 py-4 text-slate-600">{account.type}</td>
-                  <td className="px-4 py-4 text-slate-700">
+                  <td className="px-4 py-4 text-slate-600 text-sm">{account.type}</td>
+                  <td className="px-4 py-4 text-slate-700 text-sm">
                     ₹{account.opening_balance.toFixed(2)}
                   </td>
-                  <td className="px-4 py-4 text-emerald-600">
+                  <td className="px-4 py-4 text-emerald-600 text-sm">
                     ₹{account.total_in.toFixed(2)}
                   </td>
-                  <td className="px-4 py-4 text-rose-600">
+                  <td className="px-4 py-4 text-rose-600 text-sm">
                     ₹{account.total_out.toFixed(2)}
                   </td>
-                  <td className="px-4 py-4 font-semibold text-slate-900">
+                  <td className="px-4 py-4 font-semibold text-slate-900 text-sm">
                     ₹{account.current_balance.toFixed(2)}
                   </td>
                   <td className="px-4 py-4">

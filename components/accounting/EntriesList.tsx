@@ -147,7 +147,7 @@ const entryDate = new Date(entry.entry_date);
 return (
     <div className="saas-card bg-white flex flex-col h-full">
 {/* Filters */}
-      <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row gap-2 items-center bg-slate-50/50 shrink-0">
+      <div className="p-3 border-b border-slate-100 flex flex-col sm:flex-row gap-2 items-center bg-slate-50/50 shrink-0">
         <div className="relative w-full sm:flex-1 sm:w-40">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
@@ -262,7 +262,7 @@ return (
                   key={entry.id}
                   className="hover:bg-slate-50 transition-colors"
                 >
-                  <td className="px-4 py-4 text-slate-700">
+                  <td className="px-4 py-4 text-slate-700 text-sm">
                     {new Date(entry.entry_date).toLocaleDateString("en-GB")}
                   </td>
                   <td className="px-4 py-4">
@@ -276,25 +276,24 @@ return (
                       {entry.entry_type}
                     </span>
                   </td>
-                  <td className="px-4 py-4 text-slate-700">
+                  <td className="px-4 py-4 text-slate-700 text-sm">
                     {entry.account?.name || "-"}
                   </td>
-                  <td className="px-4 py-4 text-slate-700">
+                  <td className="px-4 py-4 text-slate-700 text-sm">
                     {entry.category?.name || "-"}
                   </td>
                   <td
                     className={
-                      "px-4 py-4 font-semibold " +
+                      "px-4 py-4 font-semibold text-sm " +
                       (entry.entry_type === "Income"
                         ? "text-emerald-600"
                         : "text-rose-600")
                     }
                   >
-                    {entry.entry_type === "Income" ? "+" : "-"}₹
-                    {Number(entry.amount).toFixed(2)}
+                    ₹{entry.amount.toFixed(2)}
                   </td>
-                  <td className="px-4 py-4 text-slate-600">
-                    {entry.description || "-"}
+                  <td className="px-4 py-4 text-slate-600 text-sm">
+                    {entry.remarks || "-"}
                   </td>
 <td className="px-4 py-4">
                     <div className="flex items-center gap-2">

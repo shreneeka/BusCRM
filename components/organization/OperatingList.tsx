@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ChevronLeft, ChevronRight, Users, Phone, User, Loader2, Search, Edit, Trash2, Percent, MoreVertical } from "lucide-react";
+import { ChevronLeft, ChevronRight, Users, Phone, User, Loader2, Search, Edit, Trash2, Percent, MoreVertical, AlertCircle } from "lucide-react";
 import { getAllOperators, deleteOperator, Operator } from "@/lib/actions/operators.actions";
 
 
@@ -13,19 +13,24 @@ export default function OperatingList({
   refreshTrigger?: number;
 }) {
   const [operators, setOperators] = useState<Operator[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [error, setError] = useState<string>("");
   const itemsPerPage = 15;
 
   const fetchOperators = async () => {
     setLoading(true);
     try {
       const data = await getAllOperators();
+      console.log('Fetched operators:', data?.length || 0, data);
       setOperators(data);
+      setError("");
     } catch (error) {
       console.error("Error fetching operators:", error);
+      setError("Failed to connect to database. Please ensure Supabase is running.");
+      setOperators([]);
     } finally {
       setLoading(false);
     }
@@ -83,6 +88,23 @@ useEffect(() => {
 
   return (
     <div className="flex flex-col h-full">
+      {/* Error Message */}
+      {error && (
+        <div className="mx-4 mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-red-600" />
+            <div>
+              <p className="text-red-800 font-medium">{error}</p>
+              <div className="text-sm text-gray-600 mt-1 space-y-1">
+                <p>Please check:</p>
+                <p>1. Supabase is running: <code className="bg-gray-100 px-1 rounded">npx supabase start</code></p>
+                <p>2. Database migrated: <code className="bg-gray-100 px-1 rounded">npx supabase db push</code></p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header & Search */}
       <div className="p-4 border-b border-slate-100 flex flex-col gap-3 bg-slate-50/50">
         <div className="relative flex-1">
@@ -95,6 +117,14 @@ useEffect(() => {
             className="input-primary pl-9 py-2 text-sm w-full bg-white"
           />
         </div>
+        <button
+          type="button"
+          onClick={() => window.location.href = '/organization'}
+          className="px-4 py-2 bg-[#3da9d4] text-white rounded-lg hover:bg-[#2882a8] transition-colors flex items-center gap-2 text-sm"
+        >
+          <Users className="w-4 h-4" />
+          Add Operator
+        </button>
       </div>
 
       {/* Content Area */}
@@ -105,11 +135,19 @@ useEffect(() => {
             <p className="text-slate-600 font-medium">
               {searchQuery ? "No operators found" : "No operators added yet"}
             </p>
-            <p className="text-slate-500 text-xs">
+            <p className="text-slate-500 text-xs mb-4">
               {searchQuery
                 ? "Try adjusting your search"
                 : "Add your first operator to get started"}
             </p>
+            <button
+              type="button"
+              onClick={() => window.location.href = '/organization'}
+              className="px-4 py-2 bg-[#3da9d4] text-white rounded-lg hover:bg-[#2882a8] transition-colors flex items-center gap-2 mx-auto text-sm"
+            >
+              <Users className="w-4 h-4" />
+              Add Operator
+            </button>
           </div>
 ) : (
           <div className="p-4 space-y-3">

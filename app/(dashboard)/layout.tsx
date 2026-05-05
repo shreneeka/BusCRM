@@ -35,7 +35,7 @@ export default async function DashboardLayout({
         <Sidebar userRole={userRole} userName={userName} />
 
         <div className="flex-1 flex flex-col h-full overflow-hidden transition-all duration-300 ease-in-out ml-64 peer-data-[collapsed=true]:ml-20">
-          <main className="flex-1 overflow-hidden p-2 flex flex-col [&>*]:h-full">
+          <main className="flex-1 overflow-hidden flex flex-col [&>*]:h-full">
             {children}
           </main>
         </div>

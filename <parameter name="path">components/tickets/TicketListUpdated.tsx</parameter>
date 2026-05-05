@@ -1,0 +1,25 @@
+2/2
+
+Next.js 16.1.6 (stale)
+Turbopack
+Console Error
+
+
+
+Database error fetching operators: {}
+components/tickets/TicketListUpdated.tsx (158:17) @ fetchOperators
+
+
+  156 |
+  157 |       if (error) {
+> 158 |         console.error("Database error fetching operators:", error);
+      |                 ^
+  159 |         setOperators([]);
+  160 |         return;
+  161 |       }
+Call Stack
+4
+
+Show 3 ignore-listed frame(s)
+fetchOperators
+components/tickets/TicketListUpdated.tsx (158:17)

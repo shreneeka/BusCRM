@@ -3,381 +3,521 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 
-// --- TYPES ---
 export interface SettlementCalculation {
-  operator_id: string;
-  operator_name: string;
-  commission_percent: number;
-  ticket_count: number;
+  total_tickets: number;
   total_amount: number;
-  commission_amount: number;
-  operator_payable: number;
-  pending_count: number;
-  pending_amount: number;
+  total_commission: number;
+  you_owed_amount: number;
+  operator_owed_amount: number;
+  net_balance: number;
+  settlement_type: "operator_pays" | "you_pay";
 }
 
-export interface OperatorTicket {
+export interface Settlement {
   id: string;
-  ticket_number: string;
-  passenger_name: string;
-  amount: number;
-  journey_date: string;
-  status: string;
-  is_settled: boolean;
-  settled_at: string | null;
   operator_id: string;
-  operators?: {
-    operator_name: string;
-    commission_percent: number;
-  };
+  total_tickets: number;
+  total_amount: number;
+  total_commission: number;
+  net_balance: number;
+  settlement_type: "operator_pays" | "you_pay";
+  status: "pending" | "completed";
+  settled_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
-// --- STEP 3: SETTLEMENT CALCULATION LOGIC ---
-
-// --- GET ALL OPERATORS WITH SETTLEMENT CALCULATIONS ---
-export async function getSettlementCalculations(): Promise<SettlementCalculation[]> {
+export async function calculateOperatorSettlement(operatorId: string): Promise<SettlementCalculation | null> {
   const supabase = await createClient();
 
   try {
-    // First try to get from the view
-    const { data, error } = await supabase
-      .from("settlement_calculations")
-      .select("*")
-      .order("operator_name");
+    const { data, error } = await supabase.rpc("calculate_operator_settlement", {
+      p_operator_id: operatorId,
+    });
 
     if (error) {
-      console.log("Settlement view not found, using fallback calculation");
-      // If the view doesn't exist, calculate manually
-      return await calculateSettlementsManually();
+      console.error("Error calculating settlement:", error);
+      return null;
     }
 
-    return data || [];
-  } catch (error: unknown) {
-    console.error("Unexpected error fetching settlement calculations:", error);
-    // Fallback to manual calculation
-    return await calculateSettlementsManually();
+    return data?.[0] || null;
+  } catch (error) {
+    console.error("Error in calculateOperatorSettlement:", error);
+    return null;
   }
 }
 
-// Fallback function to calculate settlements manually when view doesn't exist
-async function calculateSettlementsManually(): Promise<SettlementCalculation[]> {
-  try {
-    // Import and use the existing operators data to avoid database issues
-    const { getAllOperators } = await import("./operators.actions");
-    const operators = await getAllOperators();
+export async function getOperatorSettlements(operatorId?: string): Promise<Settlement[]> {
+  const supabase = await createClient();
 
-    if (!operators || operators.length === 0) {
-      console.log("No operators found for settlement calculation");
+  try {
+    let query = supabase
+      .from("settlements")
+      .select(`
+        *,
+        operators (
+          operator_name,
+          person_name,
+          mobile_number
+        )
+      `)
+      .order("created_at", { ascending: false });
+
+    if (operatorId) {
+      query = query.eq("operator_id", operatorId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("Error fetching settlements:", error);
       return [];
     }
 
-    console.log("Found operators for settlement calculation:", operators.length);
-
-    // For now, return empty calculations since we need tickets data
-    // This prevents the error and shows proper messaging in the UI
-    console.log("Settlement calculations available but no ticket data integration yet");
-    
-    // Return sample settlement calculations based on available operators
-    return operators.map(operator => ({
-      operator_id: operator.id,
-      operator_name: operator.operator_name,
-      commission_percent: operator.commission_percent,
-      ticket_count: 0,
-      total_amount: 0,
-      commission_amount: 0,
-      operator_payable: 0,
-      pending_count: 0,
-      pending_amount: 0,
-    }));
-    
-  } catch (error: unknown) {
-    console.error("Error in manual settlement calculation:", error);
+    return data || [];
+  } catch (error) {
+    console.error("Error in getOperatorSettlements:", error);
     return [];
   }
 }
 
-// --- GET SETTLEMENT CALCULATION BY OPERATOR ---
-export async function getSettlementCalculationByOperator(operatorId: string): Promise<SettlementCalculation | null> {
-  const supabase = await createClient();
-
-  const { data, error } = await supabase
-    .from("settlement_calculations")
-    .select("*")
-    .eq("operator_id", operatorId)
-    .single();
-
-  if (error) {
-    console.error("Error fetching settlement calculation:", error);
-    return null;
-  }
-
-  return data;
-}
-
-// --- GET OPERATOR TICKETS FOR SETTLEMENT ---
-export async function getOperatorTickets(operatorId: string): Promise<OperatorTicket[]> {
-  const supabase = await createClient();
-
-  const { data, error } = await supabase
-    .from("tickets")
-    .select(`
-      id,
-      ticket_number,
-      passenger_name,
-      amount,
-      journey_date,
-      status,
-      is_settled,
-      settled_at,
-      operator_id
-    `)
-    .eq("operator_id", operatorId)
-    .eq("status", "Booked")
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    console.error("Error fetching operator tickets:", error);
-    return [];
-  }
-
-  return data || [];
-}
-
-// --- GET PENDING TICKETS FOR SETTLEMENT ---
-export async function getPendingTickets(): Promise<OperatorTicket[]> {
-  const supabase = await createClient();
-
-  const { data, error } = await supabase
-    .from("tickets")
-    .select(`
-      id,
-      ticket_number,
-      passenger_name,
-      amount,
-      journey_date,
-      status,
-      is_settled,
-      settled_at,
-      operator_id,
-      operators!inner(
-        operator_name,
-        commission_percent
-      )
-    `)
-    .eq("status", "Booked")
-    .eq("is_settled", false)
-    .not("operator_id", "is", null)
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    console.error("Error fetching pending tickets:", error);
-    return [];
-  }
-
-  // Transform the data to match the expected type
-  const transformedData = (data || []).map((ticket: any) => ({
-    ...ticket,
-    operators: ticket.operators?.[0] || null // Take first operator from array
-  }));
-
-  return transformedData as OperatorTicket[];
-}
-
-// --- CALCULATE SETTLEMENT FOR OPERATOR ---
-export async function calculateOperatorSettlement(operatorId: string): Promise<{
-  totalAmount: number;
-  commissionAmount: number;
-  operatorPayable: number;
-  ticketCount: number;
-} | null> {
-  const supabase = await createClient();
-
-  // Get operator details
-  const { data: operator, error: operatorError } = await supabase
-    .from("operators")
-    .select("operator_name, commission_percent")
-    .eq("id", operatorId)
-    .single();
-
-  if (operatorError || !operator) {
-    console.error("Operator not found:", operatorError);
-    return null;
-  }
-
-  // Get all booked tickets for this operator
-  const { data: tickets, error: ticketsError } = await supabase
-    .from("tickets")
-    .select("amount")
-    .eq("operator_id", operatorId)
-    .eq("status", "Booked")
-    .eq("is_settled", false);
-
-  if (ticketsError) {
-    console.error("Error fetching tickets:", ticketsError);
-    return null;
-  }
-
-  const ticketCount = tickets?.length || 0;
-  const totalAmount = tickets?.reduce((sum, t) => sum + (t.amount || 0), 0) || 0;
-  const commissionAmount = (totalAmount * 10) / 100; // Fixed 10% commission
-  const operatorPayable = totalAmount - commissionAmount;
-
-  return {
-    totalAmount,
-    commissionAmount,
-    operatorPayable,
-    ticketCount,
-  };
-}
-
-// --- STEP 5: PAYMENT + ACCOUNTING UPDATE ---
-
-// --- SETTLE OPERATOR PAYMENT ---
-export async function settleOperatorPayment(
+export async function createSettlement(
   operatorId: string,
-  accountId: string
-): Promise<{ success: boolean; message: string; data?: any }> {
+  notes?: string
+): Promise<{ success: boolean; settlementId?: string; error?: string }> {
   const supabase = await createClient();
 
   try {
-    // Get operator details
-    const { data: operator, error: operatorError } = await supabase
-      .from("operators")
-      .select("operator_name, commission_percent")
-      .eq("id", operatorId)
+    const { data, error } = await supabase.rpc("create_settlement", {
+      p_operator_id: operatorId,
+      p_notes: notes,
+    });
+
+    if (error) {
+      console.error("Error creating settlement:", error);
+      return { success: false, error: error.message };
+    }
+
+    // Get settlement details for accounting entry
+    const { data: settlementData } = await supabase
+      .from("settlements")
+      .select(`
+        *,
+        operators (
+          operator_name,
+          commission_percentage
+        )
+      `)
+      .eq("id", data)
       .single();
 
-    if (operatorError || !operator) {
-      return { success: false, message: "Operator not found" };
-    }
-
-    // Get pending tickets
-    const { data: tickets, error: ticketsError } = await supabase
-      .from("tickets")
-      .select("id, amount")
-      .eq("operator_id", operatorId)
-      .eq("status", "Booked")
-      .eq("is_settled", false);
-
-    if (ticketsError) {
-      return { success: false, message: "Error fetching tickets" };
-    }
-
-    if (!tickets || tickets.length === 0) {
-      return { success: false, message: "No pending tickets found" };
-    }
-
-    // Calculate totals
-    const totalAmount = tickets.reduce((sum, t) => sum + (t.amount || 0), 0);
-    const commissionAmount = (totalAmount * 10) / 100; // Fixed 10% commission
-    const operatorPayable = totalAmount - commissionAmount;
-
-    // Get current user
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return { success: false, message: "User not authenticated" };
-    }
-
-    // Get operator payment category
-    const { data: category } = await supabase
-      .from("accounting_categories")
-      .select("id")
-      .eq("name", "Operator Payment")
-      .eq("category_type", "Expense")
-      .single();
-
-    // Create expense entry for operator payment
-    if (category) {
-      await supabase.from("accounting_entries").insert({
-        entry_type: "Expense",
-        account_id: accountId,
-        category_id: category.id,
-        amount: operatorPayable,
-        entry_date: new Date().toISOString().split("T")[0],
-        description: `Operator Payment - ${operator.operator_name}`,
-        created_by: user.id,
-      });
-    }
-
-    // Create income entry for commission
-    const { data: commissionCategory } = await supabase
-      .from("accounting_categories")
-      .select("id")
-      .eq("name", "Commission")
-      .eq("category_type", "Income")
-      .single();
-
-    if (commissionCategory) {
-      await supabase.from("accounting_entries").insert({
-        entry_type: "Income",
-        account_id: accountId,
-        category_id: commissionCategory.id,
-        amount: commissionAmount,
-        entry_date: new Date().toISOString().split("T")[0],
-        description: `Commission Income - ${operator.operator_name}`,
-        created_by: user.id,
-      });
-    }
-
-    // Update tickets as settled
-    await supabase
-      .from("tickets")
-      .update({
-        is_settled: true,
-        settled_at: new Date().toISOString(),
-        settled_by: user.id,
-      })
-      .eq("operator_id", operatorId)
-      .eq("is_settled", false);
-
-    // Update account balance (deduct operator payment)
-    const { data: account } = await supabase
-      .from("accounts")
-      .select("balance")
-      .eq("id", accountId)
-      .single();
-
-    if (account) {
-      await supabase
+    if (settlementData) {
+      // Get or create cash account
+      const { data: cashAccount } = await supabase
         .from("accounts")
-        .update({ balance: account.balance - operatorPayable })
-        .eq("id", accountId);
+        .select("id")
+        .eq("name", "Cash")
+        .eq("type", "Cash")
+        .single();
+
+      // Get commission category
+      const { data: commissionCategory } = await supabase
+        .from("accounting_categories")
+        .select("id")
+        .eq("name", "Commission")
+        .eq("category_type", "Income")
+        .single();
+
+      if (cashAccount && commissionCategory && settlementData.net_balance !== 0) {
+        // Create accounting entry for commission income/expense
+        await supabase.from("accounting_entries").insert({
+          account_id: cashAccount.id,
+          category_id: commissionCategory.id,
+          entry_type: settlementData.settlement_type === "operator_pays" ? "Income" : "Expense",
+          amount: Math.abs(settlementData.net_balance),
+          entry_date: new Date().toISOString().split("T")[0],
+          description: `${settlementData.settlement_type === "operator_pays" ? "Commission received from" : "Commission paid to"} ${settlementData.operators?.operator_name || 'Operator'} - ${settlementData.total_tickets} tickets`,
+        });
+      }
     }
 
-    revalidatePath("/operator-settlements");
+    revalidatePath("/dashboard/settlements");
     revalidatePath("/accounting");
-
-    return {
-      success: true,
-      message: "Payment settled successfully",
-      data: {
-        operatorName: operator.operator_name,
-        ticketCount: tickets.length,
-        totalAmount,
-        commissionAmount,
-        operatorPayable,
-      },
-    };
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-    console.error("Settlement error:", error);
-    return { success: false, message: errorMessage };
+    return { success: true, settlementId: data };
+  } catch (error) {
+    console.error("Error in createSettlement:", error);
+    return { success: false, error: "Failed to create settlement" };
   }
 }
 
-// --- GET SETTLEMENT SUMMARY ---
-export async function getSettlementSummary(): Promise<{
-  totalOperators: number;
-  totalPendingAmount: number;
-  totalCommissionAmount: number;
-  totalOperatorPayable: number;
-}> {
-  const calculations = await getSettlementCalculations();
+export async function completeSettlement(
+  settlementId: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
 
-  return {
-    totalOperators: calculations.length,
-    totalPendingAmount: calculations.reduce((sum, c) => sum + c.pending_amount, 0),
-    totalCommissionAmount: calculations.reduce((sum, c) => sum + c.commission_amount, 0),
-    totalOperatorPayable: calculations.reduce((sum, c) => sum + c.operator_payable, 0),
-  };
+  try {
+    const { error } = await supabase.rpc("complete_settlement", {
+      p_settlement_id: settlementId,
+    });
+
+    if (error) {
+      console.error("Error completing settlement:", error);
+      return { success: false, error: error.message };
+    }
+
+    revalidatePath("/dashboard/settlements");
+    return { success: true };
+  } catch (error) {
+    console.error("Error in completeSettlement:", error);
+    return { success: false, error: "Failed to complete settlement" };
+  }
+}
+
+export async function getPendingTicketsForOperator(operatorId: string) {
+  const supabase = await createClient();
+
+  try {
+    const { data, error } = await supabase
+      .from("tickets")
+      .select(`
+        *,
+        operators (
+          operator_name,
+          commission_percentage
+        )
+      `)
+      .eq("operator_id", operatorId)
+      .eq("settlement_status", "pending")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching pending tickets:", error);
+      return [];
+    }
+
+    return data || [];
+  } catch (error) {
+    console.error("Error in getPendingTicketsForOperator:", error);
+    return [];
+  }
+}
+
+export async function getAllOperatorsWithPendingSettlements() {
+  const supabase = await createClient();
+
+  try {
+    const { data, error } = await supabase
+      .from("operators")
+      .select(`
+        *,
+        tickets!inner (
+          id,
+          amount,
+          payment_received_by,
+          settlement_status
+        )
+      `)
+      .eq("tickets.settlement_status", "pending")
+      .eq("is_active", true);
+
+    if (error) {
+      console.error("Error fetching operators with pending settlements:", error);
+      return [];
+    }
+
+    // Group tickets by operator and calculate totals
+    const operatorsMap = new Map();
+    
+    data?.forEach((operator: {
+      id: string;
+      commission_percentage: number;
+      tickets: Array<{
+        id: string;
+        amount: number;
+        payment_received_by: string;
+        settlement_status: string;
+      }>;
+    }) => {
+      if (!operatorsMap.has(operator.id)) {
+        operatorsMap.set(operator.id, {
+          ...operator,
+          pending_tickets: [],
+          total_amount: 0,
+          total_commission: 0,
+          you_owed_amount: 0,
+          operator_owed_amount: 0,
+          net_balance: 0,
+        });
+      }
+      
+      const op = operatorsMap.get(operator.id);
+      operator.tickets.forEach((ticket: {
+        amount: number;
+        payment_received_by: string;
+      }) => {
+        op.pending_tickets.push(ticket);
+        op.total_amount += ticket.amount;
+        
+        // Use 10% commission as default, or operator's commission if higher
+        const commissionRate = Math.max(10, operator.commission_percentage || 0);
+        const commission = ticket.amount * commissionRate / 100;
+        op.total_commission += commission;
+        
+        if (ticket.payment_received_by === "self") {
+          op.you_owed_amount += commission;
+        } else {
+          op.operator_owed_amount += commission;
+        }
+      });
+      
+      op.net_balance = op.operator_owed_amount - op.you_owed_amount;
+    });
+
+    return Array.from(operatorsMap.values());
+  } catch (error) {
+    console.error("Error in getAllOperatorsWithPendingSettlements:", error);
+    return [];
+  }
+}
+
+// New operator settlement functions for updated workflow
+export async function createOperatorSettlement(settlementData: {
+  operator_name: string;
+  mobile_number?: string;
+  total_amount: number;
+  commission_percentage: number;
+  commission_amount: number;
+  operator_payable: number;
+  is_paid: boolean;
+  paid_at?: string;
+  payment_status?: string;
+  settlement_method?: string;
+  reference_number?: string;
+  bank_name?: string;
+  account_number?: string;
+  payment_collector_name?: string;
+  payment_collector_mobile?: string;
+  payment_collected_at?: string;
+  notes?: string;
+  ticket_ids?: string[];
+}) {
+  const supabase = await createClient();
+
+  try {
+    // Create settlement record
+    const { data: settlement, error: settlementError } = await supabase
+      .from("operator_settlements")
+      .insert({
+        operator_name: settlementData.operator_name,
+        mobile_number: settlementData.mobile_number || null,
+        total_amount: settlementData.total_amount,
+        commission_percentage: settlementData.commission_percentage,
+        commission_amount: settlementData.commission_amount,
+        operator_payable: settlementData.operator_payable,
+        is_paid: settlementData.is_paid,
+        paid_at: settlementData.paid_at || null,
+        payment_status: settlementData.payment_status || "pending",
+        settlement_method: settlementData.settlement_method || "cash",
+        reference_number: settlementData.reference_number || null,
+        bank_name: settlementData.bank_name || null,
+        account_number: settlementData.account_number || null,
+        payment_collector_name: settlementData.payment_collector_name || null,
+        payment_collector_mobile: settlementData.payment_collector_mobile || null,
+        payment_collected_at: settlementData.payment_collected_at || null,
+        notes: settlementData.notes || null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (settlementError) {
+      console.error("Error creating settlement:", settlementError);
+      return { success: false, error: settlementError.message };
+    }
+
+    // Create accounting entry for commission
+    if (settlementData.commission_amount > 0) {
+      // Get commission category
+      const { data: category } = await supabase
+        .from("accounting_categories")
+        .select("id")
+        .eq("name", "Commission")
+        .eq("category_type", "Income")
+        .single();
+
+      // Get cash account
+      const { data: account } = await supabase
+        .from("accounts")
+        .select("id")
+        .eq("name", "Cash")
+        .single();
+
+      if (category && account) {
+        const { error: accountingError } = await supabase
+          .from("accounting_entries")
+          .insert({
+            account_id: account.id,
+            category_id: category.id,
+            entry_type: "Income",
+            amount: settlementData.commission_amount,
+            entry_date: new Date().toISOString().split("T")[0],
+            description: `Commission from ${settlementData.operator_name}`,
+            created_at: new Date().toISOString(),
+          });
+
+        if (accountingError) {
+          console.error("Error creating accounting entry:", accountingError);
+          // Don't fail the whole operation if accounting entry fails
+        }
+      }
+    }
+
+    // Update tickets if provided
+    if (settlementData.ticket_ids && settlementData.ticket_ids.length > 0) {
+      const { error: updateError } = await supabase
+        .from("tickets")
+        .update({
+          updated_at: new Date().toISOString(),
+        })
+        .in("id", settlementData.ticket_ids);
+
+      if (updateError) {
+        console.error("Error updating tickets:", updateError);
+        // Don't fail the whole operation if ticket update fails
+      }
+    }
+
+    revalidatePath("/settlements");
+    revalidatePath("/tickets");
+
+    return { success: true, data: settlement };
+  } catch (error) {
+    console.error("Unexpected error in createOperatorSettlement:", error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : "Unknown error occurred" 
+    };
+  }
+}
+
+export async function getOperatorSettlementsList(filters?: {
+  operator_name?: string;
+  is_paid?: boolean;
+  start_date?: string;
+  end_date?: string;
+}) {
+  const supabase = await createClient();
+
+  try {
+    let query = supabase
+      .from("operator_settlements")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    // Apply filters
+    if (filters?.operator_name) {
+      query = query.ilike("operator_name", `%${filters.operator_name}%`);
+    }
+
+    if (filters?.is_paid !== undefined) {
+      query = query.eq("is_paid", filters.is_paid);
+    }
+
+    if (filters?.start_date) {
+      query = query.gte("created_at", filters.start_date);
+    }
+
+    if (filters?.end_date) {
+      query = query.lte("created_at", filters.end_date);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("Error fetching settlements:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data: data || [] };
+  } catch (error) {
+    console.error("Unexpected error in getOperatorSettlementsList:", error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : "Unknown error occurred" 
+    };
+  }
+}
+
+export async function updateSettlementPayment(
+  settlementId: string,
+  isPaid: boolean,
+  paymentAmount?: number
+) {
+  const supabase = await createClient();
+
+  try {
+    // First get the current settlement to calculate amounts
+    const { data: currentSettlement, error: fetchError } = await supabase
+      .from("operator_settlements")
+      .select("*")
+      .eq("id", settlementId)
+      .single();
+
+    if (fetchError) {
+      console.error("Error fetching settlement:", fetchError);
+      return { success: false, error: fetchError.message };
+    }
+
+    const updateData: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (isPaid) {
+      updateData.is_paid = true;
+      updateData.paid_at = new Date().toISOString();
+      updateData.payment_status = 'done';
+      updateData.paid_amount = currentSettlement.operator_payable;
+      updateData.remaining_amount = 0;
+    } else if (paymentAmount && paymentAmount > 0) {
+      // Handle partial payment
+      const paidAmount = (currentSettlement.paid_amount || 0) + paymentAmount;
+      const remainingAmount = currentSettlement.operator_payable - paidAmount;
+      
+      updateData.paid_amount = paidAmount;
+      updateData.remaining_amount = remainingAmount;
+      updateData.payment_status = remainingAmount <= 0 ? 'done' : 'partial';
+      updateData.is_paid = remainingAmount <= 0;
+      
+      if (remainingAmount <= 0) {
+        updateData.paid_at = new Date().toISOString();
+      }
+    } else {
+      updateData.is_paid = false;
+      updateData.payment_status = 'pending';
+    }
+
+    const { data, error } = await supabase
+      .from("operator_settlements")
+      .update(updateData)
+      .eq("id", settlementId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error updating settlement payment:", error);
+      return { success: false, error: error.message };
+    }
+
+    revalidatePath("/settlements");
+
+    return { success: true, data };
+  } catch (error) {
+    console.error("Unexpected error in updateSettlementPayment:", error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : "Unknown error occurred" 
+    };
+  }
 }

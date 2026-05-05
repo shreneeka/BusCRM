@@ -7,44 +7,59 @@ import { revalidatePath } from "next/cache";
 export interface CreateTicketPayload {
   passenger_name: string;
   mobile_number: string;
-  pickup_location: string;
-  drop_location: string;
-  journey_date: string;
-  seat_numbers: string[];
-  total_seats: number;
-  pickup_time: string;
-  bus_number?: string;
-  travel_type: "AC" | "Non-AC";
-  ticket_number: string;
-  account_id?: string;
-  account_type: "Cash" | "UPI";
-  amount: number;
-  operator_id?: string;
-}
-
-export interface Ticket {
-  id: string;
-  passenger_name: string;
-  mobile_number: string;
-  pickup_location: string;
+  pickup_city: string;
+  pickup_area: string;
+  drop_city: string;
   drop_location: string;
   journey_date: string;
   booking_date: string;
   seat_numbers: string[];
   total_seats: number;
   pickup_time: string;
-  bus_number: string | null;
+  bus_number: string;
   travel_type: "AC" | "Non-AC";
   ticket_number: string;
+  account_id: string;
+  account_type: "Cash" | "UPI";
+  amount: number;
+  operator_id: string;
+  operator_name?: string;
+  operator_mobile?: string;
+}
+
+export interface Ticket {
+  id: string;
+  ticket_number: string;
+  passenger_name: string;
+  mobile_number: string;
+  pickup_city: string;
+  pickup_area: string;
+  drop_city: string;
+  drop_location: string;
+  journey_date: string;
+  booking_date: string;
+  seat_numbers: string[];
+  total_seats: number;
+  pickup_time: string;
+  bus_number: string;
+  travel_type: "AC" | "Non-AC";
   account_id: string | null;
   account_type: string;
   amount: number;
-  status: string;
+  commission_amount: number;
+  operator_payable: number;
+  settlement_paid_to_operator: boolean;
+  settlement_paid_at: string | null;
+  operator_id: string;
+  operator_name?: string;
+  operator_mobile?: string;
   created_at: string;
+  updated_at: string;
 }
 
 export interface Account {
   id: string;
+
   name: string;
   type: string;
   balance: number;
@@ -131,34 +146,35 @@ export async function createTicket(data: CreateTicketPayload) {
 
   if (authError || !user) throw new Error("You must be logged in.");
 
-  // Convert seat_numbers array to PostgreSQL array format
-  const seatNumbersDb = `{${data.seat_numbers.map((s) => `"${s}"`).join(",")}}`;
 
   // Step 1: Create Ticket
   const { data: newTicket, error: ticketError } = await supabase
     .from("tickets")
     .insert([
       {
+        ticket_number: data.ticket_number,
         passenger_name: data.passenger_name,
         mobile_number: data.mobile_number,
-        pickup_location: data.pickup_location,
+        pickup_city: data.pickup_city,
+        pickup_area: data.pickup_area,
+        pickup_location: data.pickup_area, // Use pickup_area as pickup_location
+        drop_city: data.drop_city,
         drop_location: data.drop_location,
         journey_date: data.journey_date,
-        seat_numbers: seatNumbersDb,
+        booking_date: data.booking_date,
+        seat_numbers: data.seat_numbers,
         total_seats: data.total_seats,
         pickup_time: data.pickup_time,
-        bus_number: data.bus_number || null,
+        bus_number: data.bus_number,
         travel_type: data.travel_type,
-        ticket_number: data.ticket_number,
-        account_id: data.account_id || null,
+        account_id: data.account_id,
         account_type: data.account_type,
         amount: data.amount,
-        operator_id: data.operator_id || null,
-        created_by: user.id,
-        status: "Booked",
+        operator_id: data.operator_id,
       },
     ])
-.select()
+
+    .select()
     .single();
 
   if (ticketError) throw new Error(ticketError.message);
@@ -171,44 +187,23 @@ export async function createTicket(data: CreateTicketPayload) {
     accountId = await getOrCreateCashAccount();
   }
 
-  // Step 2: Create income entry in income_entries table
-  const { error: incomeError } = await supabase.from("income_entries").insert([
-    {
-      ticket_id: newTicket.id,
-      account_id: accountId,
-      amount: data.amount,
-      description: `Ticket #${data.ticket_number} - ${data.passenger_name}`,
-      entry_type: "Ticket Booking",
-    },
-  ]);
-
-  if (incomeError) {
-    console.error("Income entry creation failed:", incomeError);
-    // Continue anyway - don't fail the whole ticket
-  } else {
-    console.log("✅ Income entry created successfully");
-  }
-
-  // Step 3: Get Ticket Booking Category ID
-  const ticketBookingCategoryId = await getTicketBookingCategoryId();
-
-  // Step 4: Create auto entry in accounting_entries table
+  // Step 2: Create accounting entry for full ticket amount as income
   const { error: accountingError } = await supabase.from("accounting_entries").insert([
     {
-      entry_type: "Income",
-      account_id: accountId,
-      category_id: ticketBookingCategoryId,
-      amount: data.amount,
-      entry_date: new Date().toISOString().split("T")[0],
       description: `Ticket Booking - ${data.passenger_name} (${data.account_type})`,
-      ticket_id: newTicket.id,
-      created_by: user.id,
+      amount: data.amount,
+      type: "income",
+      category: "ticket_booking",
+      reference_type: "ticket",
+      reference_id: newTicket.id,
+      date: new Date().toISOString().split("T")[0],
+      account_id: accountId,
     },
   ]);
 
   if (accountingError) {
     console.error("Accounting entry creation failed:", accountingError);
-    // Don't throw - continue to update balance
+    // Continue anyway - don't fail the whole ticket
   } else {
     console.log("✅ Accounting entry created successfully");
   }
@@ -336,6 +331,50 @@ export async function searchCustomersByMobileFragment(fragment: string) {
   return data || [];
 }
 
+export async function searchOperatorsByName(fragment: string) {
+  const supabase = await createClient();
+  if (fragment.length < 2) return [];
+
+  const nameFragment = `%${fragment}%`;
+
+  const { data, error } = await supabase
+    .from("operators")
+    .select("id, name, person_name, mobile_number, commission_percentage")
+    .eq("is_active", true)
+    .or(`name.ilike.${nameFragment},person_name.ilike.${nameFragment},mobile_number.ilike.${nameFragment}`)
+    .order("name")
+    .limit(10);
+
+  if (error) {
+    console.error("Error fetching operator suggestions:", error.message);
+    return [];
+  }
+
+  return data || [];
+}
+
+export async function searchOperatorsByMobile(mobileFragment: string) {
+  const supabase = await createClient();
+  if (mobileFragment.length < 3) return [];
+
+  const mobileSearch = `%${mobileFragment}%`;
+
+  const { data, error } = await supabase
+    .from("operators")
+    .select("id, name, person_name, mobile_number, commission_percentage")
+    .eq("is_active", true)
+    .ilike("mobile_number", mobileSearch)
+    .order("name")
+    .limit(5);
+
+  if (error) {
+    console.error("Error fetching operator by mobile:", error.message);
+    return [];
+  }
+
+  return data || [];
+}
+
 // --- 6. GET TICKET BY ID ---
 export async function getTicketById(ticketId: string) {
   const supabase = await createClient();
@@ -396,137 +435,7 @@ export async function cancelTicket(ticketId: string) {
   return { success: true };
 }
 
-// --- 8. SETTLE OPERATOR PAYMENT ---
-export async function settleOperatorPayment(
-  ticketId: string,
-  operatorName: string,
-  mobileNumber: string,
-) {
-  const supabase = await createClient();
 
-  // Get ticket details
-  const { data: ticket } = await supabase
-    .from("tickets")
-    .select("*, operators(commission_percentage)")
-    .eq("id", ticketId)
-    .single();
-
-  if (!ticket) throw new Error("Ticket not found");
-
-  const totalAmount = ticket.amount;
-  let commissionPercent = 10; // Default 10%
-
-  // Get operator commission if linked
-  if (ticket.operator_id) {
-    const { data: operator } = await supabase
-      .from("operators")
-      .select("commission_percentage")
-      .eq("id", ticket.operator_id)
-      .single();
-
-    if (operator) {
-      commissionPercent = operator.commission_percentage;
-    }
-  }
-
-  const commissionAmount = (totalAmount * commissionPercent) / 100;
-  const operatorPayable = totalAmount - commissionAmount;
-
-  // Create settlement record
-  await supabase.from("operator_settlements").insert([
-    {
-      ticket_id: ticketId,
-      operator_name: operatorName,
-      mobile_number: mobileNumber,
-      total_amount: totalAmount,
-      commission_percentage: commissionPercent,
-      commission_amount: commissionAmount,
-      operator_payable: operatorPayable,
-      is_paid: true,
-      paid_at: new Date().toISOString(),
-    },
-  ]);
-
-  // Update ticket status to Settled
-  await supabase
-    .from("tickets")
-    .update({ status: "Settled" })
-    .eq("id", ticketId);
-
-  // Add commission as income to accounting
-  if (ticket.account_id && commissionAmount > 0) {
-    try {
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) throw new Error("User not authenticated");
-      
-      const commissionCategoryId = await getCommissionCategoryId();
-      
-      // Create accounting entry for commission as income
-      await supabase.from("accounting_entries").insert([
-        {
-          entry_type: "Income",
-          account_id: ticket.account_id,
-          category_id: commissionCategoryId,
-          amount: commissionAmount,
-          entry_date: new Date().toISOString().split("T")[0],
-          description: `Commission - Ticket #${ticket.ticket_number} - ${operatorName} (${commissionPercent}%)`,
-          ticket_id: ticketId,
-          created_by: user.id,
-        },
-      ]);
-
-      // Update account balance - add commission income
-      const { data: account } = await supabase
-        .from("accounts")
-        .select("balance")
-        .eq("id", ticket.account_id)
-        .single();
-
-      if (account) {
-        // First add the full amount back (as it's already been deducted as payable)
-        // Then add commission as income - net effect: balance remains + commissionAmount
-        await supabase
-          .from("accounts")
-          .update({ balance: account.balance + commissionAmount })
-          .eq("id", ticket.account_id);
-      }
-
-      revalidatePath("/accounting");
-    } catch (err) {
-      console.error("Error adding commission to accounting:", err);
-      // Continue even if commission accounting fails - settlement is already recorded
-    }
-  }
-
-  // Deduct operator payable from the main account (if it was added as income)
-  if (ticket.account_id && operatorPayable > 0) {
-    const { data: account } = await supabase
-      .from("accounts")
-      .select("balance")
-      .eq("id", ticket.account_id)
-      .single();
-
-    if (account) {
-      await supabase
-        .from("accounts")
-        .update({ balance: account.balance - operatorPayable })
-        .eq("id", ticket.account_id);
-    }
-  }
-
-  revalidatePath("/tickets");
-  return {
-    success: true,
-    settlement: {
-      totalAmount,
-      commissionPercent,
-      commissionAmount,
-      operatorPayable,
-    },
-  };
-}
 
 // --- 9. ADD NEW ACCOUNT ---
 export async function addAccount(name: string, type: "Cash" | "UPI") {
@@ -596,18 +505,144 @@ export async function getTicketStats() {
 
   const { data: allTickets } = await supabase
     .from("tickets")
-    .select("id, amount, status, journey_date, created_at");
+    .select("id, amount, commission_amount, settlement_paid_to_operator, journey_date, created_at");
 
   if (!allTickets) return null;
 
   return {
-    totalBooked: allTickets.filter((t: { status: string }) => t.status === "Booked").length,
-    totalCancelled: allTickets.filter((t: { status: string }) => t.status === "Cancelled").length,
-    totalSettled: allTickets.filter((t: { status: string }) => t.status === "Settled").length,
+    totalBooked: allTickets.length,
+    totalSettled: allTickets.filter((t: { settlement_paid_to_operator: boolean }) => t.settlement_paid_to_operator).length,
     totalAmount: allTickets.reduce((sum: number, t: { amount: number }) => sum + (t.amount || 0), 0),
+    totalCommission: allTickets.reduce((sum: number, t: { commission_amount: number }) => sum + (t.commission_amount || 0), 0),
     todayBookings: allTickets.filter((t: { created_at: string }) => {
       const bookingDate = new Date(t.created_at).toISOString().split("T")[0];
       return bookingDate === today;
     }).length,
   };
+}
+
+// --- 14. PROCESS OPERATOR SETTLEMENT ---
+export async function processOperatorSettlement(
+  operatorId: string,
+  ticketIds: string[],
+  notes?: string
+) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) throw new Error("You must be logged in.");
+
+  try {
+    // Get ticket details for settlement record
+    const { data: tickets, error: ticketsError } = await supabase
+      .from("tickets")
+      .select("*")
+      .in("id", ticketIds);
+
+    if (ticketsError) throw ticketsError;
+    if (!tickets || tickets.length === 0) throw new Error("No tickets found");
+
+    // Calculate totals
+    const totalAmount = tickets.reduce((sum, ticket) => sum + (ticket.amount || 0), 0);
+    const commissionAmount = tickets.reduce((sum, ticket) => sum + (ticket.commission_amount || 0), 0);
+    const operatorPayable = tickets.reduce((sum, ticket) => sum + (ticket.operator_payable || 0), 0);
+
+    // Get operator details
+    const { data: operator, error: operatorError } = await supabase
+      .from("operators")
+      .select("*")
+      .eq("id", operatorId)
+      .single();
+
+    if (operatorError) throw operatorError;
+
+    // Create settlement record
+    const { error: settlementError } = await supabase
+      .from("operator_settlements")
+      .insert({
+        operator_id: operatorId,
+        total_amount: totalAmount,
+        commission_percentage: operator.commission_percentage,
+        commission_amount: commissionAmount,
+        operator_payable: operatorPayable,
+        settlement_date: new Date().toISOString().split("T")[0],
+        paid_at: new Date().toISOString(),
+        paid_by: user.id,
+        notes: notes || null,
+      });
+
+    if (settlementError) throw settlementError;
+
+    // Update tickets as settled
+    const { error: updateError } = await supabase
+      .from("tickets")
+      .update({
+        settlement_paid_to_operator: true,
+        settlement_paid_at: new Date().toISOString(),
+      })
+      .in("id", ticketIds);
+
+    if (updateError) throw updateError;
+
+    // Create accounting entry for commission income
+    const { data: commissionCategory } = await supabase
+      .from("accounting_categories")
+      .select("id")
+      .eq("name", "Commission")
+      .eq("category_type", "Income")
+      .single();
+
+    if (commissionCategory) {
+      // Get or create cash account
+      const { data: cashAccount } = await supabase
+        .from("accounts")
+        .select("id")
+        .eq("name", "Cash")
+        .eq("type", "Cash")
+        .single();
+
+      if (cashAccount) {
+        await supabase.from("accounting_entries").insert({
+          account_id: cashAccount.id,
+          category_id: commissionCategory.id,
+          entry_type: "Income",
+          amount: commissionAmount,
+          entry_date: new Date().toISOString().split("T")[0],
+          description: `Commission from ${operator.operator_name} - ${tickets.length} tickets`,
+        });
+      }
+    }
+
+    revalidatePath("/settlements");
+    revalidatePath("/accounting");
+    return { success: true };
+  } catch (error: unknown) {
+    console.error("Settlement processing error:", error);
+    throw error;
+  }
+}
+
+// --- 15. GET SETTLEMENT HISTORY ---
+export async function getSettlementHistory() {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("operator_settlements")
+    .select(`
+      *,
+      operator:operators(
+        operator_name,
+        person_name,
+        mobile_number
+      ),
+      paid_by_user:auth.users(
+        email
+      )
+    `)
+    .order("paid_at", { ascending: false });
+
+  if (error) return [];
+  return data || [];
 }

@@ -38,8 +38,7 @@ const navItems = [
   { name: "Tickets", href: "/tickets", icon: Ticket },
   { name: "Customers", href: "/customers", icon: Users },
   { name: "Cities", href: "/cities", icon: MapPin },
-{name: "Operators", href: "/operators", icon: UserCog },
-  { name: "Payments", href: "/payments", icon: CreditCard },
+  { name: "Operators", href: "/operators", icon: UserCog },
   { name: "Accounting", href: "/accounting", icon: DollarSign },
   { name: "Users", href: "/users", icon: UserCog, adminOnly: true },
 ];
@@ -108,7 +107,7 @@ export default function Sidebar({
         </div>
 
         {/* NAVIGATION LINKS WITH TOOLTIPS */}
-        <nav className="flex-1 px-3 py-6 space-y-2 overflow-y-auto overflow-x-hidden">
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto overflow-x-hidden">
           <TooltipProvider delayDuration={0}>
             {navItems.map((item) => {
               if (item.adminOnly && userRole !== "Admin") return null;
@@ -121,7 +120,7 @@ export default function Sidebar({
                     <Link
                       href={item.href}
                       className={cn(
-                        "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 group cursor-pointer",
+                        "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 group cursor-pointer",
                         isActive
                           ? "bg-[#3da9d4]/10 text-[#3da9d4]"
                           : "text-slate-900 hover:bg-slate-50",
@@ -130,7 +129,7 @@ export default function Sidebar({
                     >
                       <Icon
                         className={cn(
-                          "w-5 h-5 shrink-0 transition-colors",
+                          "w-4 h-4 shrink-0 transition-colors",
                           isActive
                             ? "text-[#3da9d4]"
                             : "group-hover:text-[#3da9d4]",
@@ -165,16 +164,16 @@ export default function Sidebar({
         </nav>
 
         {/* PROFILE & LOGOUT SECTION */}
-        <div className="p-2 pb-3 border-t border-slate-100 shrink-0 bg-white">
+        <div className="p-2 pb-2 border-t border-slate-100 shrink-0 bg-white">
           {isCollapsed ? (
             <TooltipProvider delayDuration={0}>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
                     onClick={() => setIsLogoutModalOpen(true)}
-                    className="flex items-center justify-center w-full py-3.5 rounded-[14px] bg-[#ee1c2e] text-white hover:bg-[#d41828] transition-colors shadow-sm animate-in fade-in duration-300"
+                    className="flex items-center justify-center w-full py-2.5 rounded-lg bg-[#ee1c2e] text-white hover:bg-[#d41828] transition-colors shadow-sm animate-in fade-in duration-300"
                   >
-                    <LogOut className="w-5 h-5 shrink-0 ml-1" />
+                    <LogOut className="w-4 h-4 shrink-0 ml-1" />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent
@@ -187,24 +186,24 @@ export default function Sidebar({
             </TooltipProvider>
           ) : (
             <div className="animate-in fade-in duration-300">
-              <p className="text-[11px] font-bold text-slate-500 tracking-wider mb-2.5 px-2">
+              <p className="text-[11px] font-bold text-slate-500 tracking-wider mb-2 px-2">
                 MY PROFILE
               </p>
 
-              <div className="bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-[0_2px_12px_-4px_rgba(0,0,0,0.05)] transition-all duration-300">
+              <div className="bg-white border border-slate-100 rounded-xl overflow-hidden shadow-[0_2px_12px_-4px_rgba(0,0,0,0.05)] transition-all duration-300">
                 <div
                   onClick={() => setIsProfileExpanded(!isProfileExpanded)}
                   className="group/profile flex items-center gap-2 p-2 cursor-pointer hover:bg-slate-50/50 transition-colors z-10 relative bg-white"
                 >
-                  <div className="w-10 h-10 rounded-full bg-[#ebf6fa] flex items-center justify-center text-[#3da9d4] font-black text-[15px] shrink-0">
+                  <div className="w-8 h-8 rounded-full bg-[#ebf6fa] flex items-center justify-center text-[#3da9d4] font-black text-[13px] shrink-0">
                     {initials}
                   </div>
 
                   <div className="flex-1 min-w-0 pr-1">
-                    <p className="text-[14px] font-bold text-[#1e224c] truncate">
+                    <p className="text-[13px] font-bold text-[#1e224c] truncate">
                       {userName}
                     </p>
-                    <p className="text-[12px] text-slate-400 truncate font-medium mt-0.5">
+                    <p className="text-[11px] text-slate-400 truncate font-medium mt-0.5">
                       {userRole}
                     </p>
                   </div>
@@ -212,12 +211,12 @@ export default function Sidebar({
                   <div className="shrink-0 transition-transform duration-300">
                     {isProfileExpanded ? (
                       <ChevronDown
-                        className="w-5 h-5 text-slate-400 group-hover/profile:text-[#3da9d4] transition-colors"
+                        className="w-4 h-4 text-slate-400 group-hover/profile:text-[#3da9d4] transition-colors"
                         strokeWidth={2}
                       />
                     ) : (
                       <ChevronUp
-                        className="w-5 h-5 text-slate-400 group-hover/profile:text-[#3da9d4] transition-colors"
+                        className="w-4 h-4 text-slate-400 group-hover/profile:text-[#3da9d4] transition-colors"
                         strokeWidth={2}
                       />
                     )}
@@ -228,18 +227,18 @@ export default function Sidebar({
                   className={cn(
                     "transition-all duration-300 ease-in-out bg-white",
                     isProfileExpanded
-                      ? "max-h-24 opacity-100"
+                      ? "max-h-20 opacity-100"
                       : "max-h-0 opacity-0",
                   )}
                 >
                   <div className="h-px bg-slate-100 mx-3" />
 
-                  <div className="p-2 pt-2.5">
+                  <div className="p-2 pt-2">
                     <button
                       onClick={() => setIsLogoutModalOpen(true)}
-                      className="flex items-center justify-center gap-2 w-full py-2.5 rounded-[12px] bg-[#ee1c2e] text-white hover:bg-[#d41828] transition-colors font-semibold text-[14px] shadow-sm"
+                      className="flex items-center justify-center gap-2 w-full py-2 rounded-lg bg-[#ee1c2e] text-white hover:bg-[#d41828] transition-colors font-semibold text-[13px] shadow-sm"
                     >
-                      <LogOut className="w-[18px] h-[18px]" strokeWidth={2.5} />
+                      <LogOut className="w-4 h-4" strokeWidth={2.5} />
                       Logout
                     </button>
                   </div>

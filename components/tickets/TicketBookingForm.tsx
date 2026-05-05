@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { createTicket, getOperators } from "@/lib/actions/ticket.actions";
+import { createTicket, getOperators, getAccounts } from "@/lib/actions/ticket.actions";
+import OperatorSearchSelector from "@/components/operators/OperatorSearchSelector";
 import {
   Loader2,
   MapPin,
@@ -30,10 +31,17 @@ interface Operator {
   is_active: boolean;
 }
 
+interface Account {
+  id: string;
+  name: string;
+  type: string;
+}
+
 interface Customer {
   id: string;
   name: string;
   mobile_number: string;
+  commission_percent?: number;
 }
 
 interface City {
@@ -130,7 +138,7 @@ function CitySelector({
 
       {isOpen && (
         <div
-          className={`absolute z-50 mt-1 w-[240px] bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 ${alignMenu === "right" ? "right-0" : "left-0"}`}
+          className={`absolute z-[60] mt-1 w-[240px] bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 ${alignMenu === "right" ? "right-0" : "left-0"}`}
         >
           <div className="max-h-48 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             {filteredCities.map((city) => (
@@ -238,7 +246,7 @@ function MobileNumberSelector({
       </div>
 
       {isOpen && customers.length > 0 && (
-        <div className="absolute z-50 mt-1 w-full bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95">
+        <div className="absolute z-[60] mt-1 w-full bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95">
           <div className="max-h-48 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             {customers.map((customer) => (
               <button
@@ -262,141 +270,7 @@ function MobileNumberSelector({
   );
 }
 
-function OperatorSelector({
-  label,
-  name,
-  operators,
-  onSelect,
-  selectedOperator,
-}: {
-  label: string;
-  name: string;
-  operators: Operator[];
-  onSelect: (operatorId: string) => void;
-  selectedOperator: string;
-}) {
-  const [search, setSearch] = useState("");
-  const [isOpen, setIsOpen] = useState(false);
-  const wrapperRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (selectedOperator) {
-      const op = operators.find((o) => o.id === selectedOperator);
-      if (op) {
-        setSearch(op.name);
-      }
-    } else {
-      setSearch("");
-    }
-  }, [selectedOperator, operators]);
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        wrapperRef.current &&
-        !wrapperRef.current.contains(event.target as Node)
-      ) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const filteredOperators = operators.filter((op) =>
-    op.name.toLowerCase().includes(search.toLowerCase()) ||
-    op.person_name?.toLowerCase().includes(search.toLowerCase()) ||
-    op.mobile_number?.includes(search)
-  );
-
-  const handleSelect = (operator: Operator) => {
-    onSelect(operator.id);
-    setSearch(operator.name);
-    setIsOpen(false);
-  };
-
-  const handleClear = () => {
-    onSelect("");
-    setSearch("");
-    setIsOpen(false);
-  };
-
-  const selectedOp = operators.find((o) => o.id === selectedOperator);
-
-  return (
-    <div ref={wrapperRef} className="relative w-full">
-      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
-        {label}
-      </label>
-      <input type="hidden" name={name} value={selectedOperator || ""} />
-      <div className="relative">
-        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-        <input
-          type="text"
-          className="input-primary pl-9 bg-white text-sm py-2 pr-8"
-          placeholder="Select Operator (Optional)"
-          value={search}
-          autoComplete="off"
-          onChange={(e) => {
-            setSearch(e.target.value);
-            onSelect("");
-            setIsOpen(true);
-          }}
-          onFocus={() => setIsOpen(true)}
-        />
-        {selectedOperator && (
-          <button
-            type="button"
-            onClick={handleClear}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-slate-100 rounded-full transition-colors"
-          >
-            <X className="w-3 h-3 text-slate-400" />
-          </button>
-        )}
-      </div>
-
-      {isOpen && operators.length > 0 && (
-        <div className="absolute z-50 mt-1 w-full bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95">
-          <div className="max-h-48 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-            <button
-              type="button"
-              onClick={handleClear}
-              className={`w-full text-left px-4 py-2.5 text-sm transition-colors border-b border-slate-50 ${
-                !selectedOperator
-                  ? "bg-[#3da9d4]/10 text-[#3da9d4]"
-                  : "text-slate-500 hover:bg-slate-50"
-              }`}
-            >
-              No Operator
-            </button>
-            {filteredOperators.map((operator) => (
-              <button
-                key={operator.id}
-                type="button"
-                onClick={() => handleSelect(operator)}
-                className={`w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 flex items-center justify-between ${
-                  selectedOperator === operator.id
-                    ? "bg-[#3da9d4]/10"
-                    : ""
-                }`}
-              >
-                <div>
-                  <p className="font-medium text-slate-800">{operator.name}</p>
-                  <p className="text-xs text-slate-500">
-                    {operator.person_name} • {operator.mobile_number}
-                  </p>
-                </div>
-                <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">
-                  {operator.commission_percentage}%
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 export default function TicketBookingForm({ onSuccess }: { onSuccess?: () => void }) {
   const supabase = createClient();
@@ -404,6 +278,7 @@ export default function TicketBookingForm({ onSuccess }: { onSuccess?: () => voi
   // Basic Details
   const [passengerName, setPassengerName] = useState("");
   const [mobileNumber, setMobileNumber] = useState("");
+  const [operatorId, setOperatorId] = useState(""); 
   const [pickupLocation, setPickupLocation] = useState<City | null>(null);
   const [dropLocation, setDropLocation] = useState<City | null>(null);
   const [journeyDate, setJourneyDate] = useState("");
@@ -419,14 +294,15 @@ export default function TicketBookingForm({ onSuccess }: { onSuccess?: () => voi
 
   // Payment Details
   const [accountType, setAccountType] = useState<"Cash" | "UPI">("Cash");
+  const [selectedAccount, setSelectedAccount] = useState("");
   const [amount, setAmount] = useState("");
-  const [operators, setOperators] = useState<Operator[]>([]);
-  const [selectedOperator, setSelectedOperator] = useState("");
+  const [operators, setOperators] = useState<Operator[]>([]); 
   const [customerSuggestions, setCustomerSuggestions] = useState<{
     id: string;
     name: string;
     mobile_number: string;
   }[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
 
   // UI States
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -446,7 +322,7 @@ export default function TicketBookingForm({ onSuccess }: { onSuccess?: () => voi
       )
       .join(" ");
 
-  const fetchCustomerSuggestions = async (digits: string) => {
+const fetchCustomerSuggestions = async (digits: string) => {
     if (digits.length < 3) {
       setCustomerSuggestions([]);
       return;
@@ -470,9 +346,13 @@ export default function TicketBookingForm({ onSuccess }: { onSuccess?: () => voi
     }
   };
 
+
+
   const handleCustomerSelect = (customer: Customer) => {
     setPassengerName(formatPassengerName(customer.name));
   };
+
+
 
   async function fetchCities() {
     const { data } = await supabase.from("cities").select("*").order("name");
@@ -498,6 +378,8 @@ export default function TicketBookingForm({ onSuccess }: { onSuccess?: () => voi
     async function loadData() {
       const operatorsData = await getOperators();
       setOperators(operatorsData);
+      const accountsData = await getAccounts();
+      setAccounts(accountsData);
       await fetchCities();
     }
     loadData();
@@ -509,6 +391,7 @@ export default function TicketBookingForm({ onSuccess }: { onSuccess?: () => voi
     if (!passengerName.trim()) newErrors.push("Passenger name is required");
     if (!mobileNumber.trim() || mobileNumber.length !== 10)
       newErrors.push("Mobile number must be exactly 10 digits");
+    if (!operatorId) newErrors.push("Operators Database name is required"); 
     if (!pickupLocation) newErrors.push("Pickup location is required");
     if (!dropLocation) newErrors.push("Drop location is required");
     if (!journeyDate) newErrors.push("Journey date is required");
@@ -544,26 +427,32 @@ export default function TicketBookingForm({ onSuccess }: { onSuccess?: () => voi
       await createTicket({
         passenger_name: formattedName,
         mobile_number: `+91 ${mobileNumber}`,
-        pickup_location: pickupLocation?.name || "",
+        pickup_city: pickupLocation?.name || "",
+        pickup_area: pickupLocation?.name || "",
+        drop_city: dropLocation?.name || "",
         drop_location: dropLocation?.name || "",
         journey_date: journeyDate,
+        booking_date: new Date().toISOString().split("T")[0],
         seat_numbers: seatArray,
         total_seats: totalSeats,
         pickup_time: pickupTime,
-        bus_number: busNumber || undefined,
+        bus_number: busNumber || "",
         travel_type: travelType,
         ticket_number: ticketNumber,
+        account_id: selectedAccount || "",
         account_type: accountType,
         amount: parseFloat(amount),
-        operator_id: selectedOperator || undefined,
-      });
+        operator_id: operatorId,
+        operator_name: operators.find(op => op.id === operatorId)?.name,
+      }); 
 
       // Reset form
       setPassengerName("");
       setMobileNumber("");
+      setOperatorId("");
       setPickupLocation(null);
       setDropLocation(null);
-      setJourneyDate("");
+      setJourneyDate(""); 
       setSeatNumbers("");
       setTotalSeats(1);
       setPickupTime("");
@@ -571,8 +460,9 @@ export default function TicketBookingForm({ onSuccess }: { onSuccess?: () => voi
       setTravelType("Non-AC");
       setTicketNumber("");
       setAmount("");
-      setSelectedOperator("");
-      setErrors([]);
+      setSelectedAccount("");
+      setOperatorId("");
+      setErrors([]); 
 
       setShowSuccess(true);
       setTimeout(() => {
@@ -588,7 +478,7 @@ export default function TicketBookingForm({ onSuccess }: { onSuccess?: () => voi
   }
 
 return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4 max-w-full overflow-visible">
       {errors.length > 0 && (
         <div className="rounded-lg border border-rose-100 bg-rose-50 p-3 text-sm text-rose-700">
           <strong className="block font-semibold mb-1">Please fix the following:</strong>
@@ -606,10 +496,10 @@ return (
         </div>
       )}
 
-      {/* Customer Details - 2 columns */}
-      <div className="grid grid-cols-2 gap-3">
+    {/* Customer & Operator Mobile - 2 columns */}
+    <div className="grid grid-cols-1 gap-3">
         <MobileNumberSelector
-          label="Mobile Number"
+          label="Customer Mobile"
           mobileNumber={mobileNumber}
           onMobileChange={(num) => {
             setMobileNumber(num);
@@ -618,8 +508,12 @@ return (
           onCustomerSelect={handleCustomerSelect}
           customers={customerSuggestions}
           formatPassengerName={formatPassengerName}
-        />
+        /> 
 
+      </div> 
+
+  {/* Passenger Name */}
+      <div className="grid grid-cols-1 gap-3"> 
         <div>
           <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
             Passenger Name *
@@ -636,7 +530,17 @@ return (
             />
           </div>
         </div>
+
       </div>
+
+      {/* Operators Database name */}
+      <div>
+        <OperatorSearchSelector
+          label="Operators Database name *"
+          selectedOperatorId={operatorId}
+          onSelect={(id) => setOperatorId(id || "")}
+        />
+      </div> 
 
       {/* Route Details - 2 columns */}
       <div className="grid grid-cols-2 gap-3">
@@ -800,8 +704,30 @@ return (
         </div>
       </div>
 
-      {/* Amount & Operator - 2 columns */}
+      {/* Account Selection - Full width */}
+      {/* Account Selection & Amount - 2 columns */}
       <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
+            Account Selection
+          </label>
+          <div className="relative">
+            <Wallet className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <select
+              value={selectedAccount}
+              onChange={(e) => setSelectedAccount(e.target.value)}
+              className="input-primary pl-9 w-full text-sm py-2 appearance-none"
+            >
+              <option value="">Select Account</option>
+              {accounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name} ({account.type})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         <div>
           <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
             Amount (₹) *
@@ -822,17 +748,11 @@ return (
             />
           </div>
         </div>
+      </div> 
 
-{operators.length > 0 && (
-          <OperatorSelector
-            label="Operator (Optional)"
-            name="operator_id"
-            operators={operators}
-            selectedOperator={selectedOperator}
-            onSelect={setSelectedOperator}
-          />
-        )}
-      </div>
+      
+
+      
 
       {/* Submit Buttons */}
       <div className="flex gap-2 pt-2">

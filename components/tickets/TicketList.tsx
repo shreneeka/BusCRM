@@ -16,6 +16,10 @@ import {
   Eye,
   X,
   ExternalLink,
+  CheckSquare,
+  Square,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -60,6 +64,9 @@ export default function TicketList({
   const [cities, setCities] = useState<City[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
+  
+  // Checkbox states
+  const [selectedTickets, setSelectedTickets] = useState<Set<string>>(new Set());
   
   // Modal states
   const [viewTicket, setViewTicket] = useState<Ticket | null>(null);
@@ -128,6 +135,35 @@ const filteredTickets = tickets.filter((ticket) => {
     startIndex,
     startIndex + itemsPerPage
   );
+
+  // Checkbox handlers
+  const handleSelectAll = () => {
+    const currentTicketIds = currentTickets.map(t => t.id);
+    if (currentTicketIds.every(id => selectedTickets.has(id))) {
+      // Deselect all current tickets
+      const newSelected = new Set(selectedTickets);
+      currentTicketIds.forEach(id => newSelected.delete(id));
+      setSelectedTickets(newSelected);
+    } else {
+      // Select all current tickets
+      const newSelected = new Set(selectedTickets);
+      currentTicketIds.forEach(id => newSelected.add(id));
+      setSelectedTickets(newSelected);
+    }
+  };
+
+  const handleSelectTicket = (ticketId: string) => {
+    const newSelected = new Set(selectedTickets);
+    if (newSelected.has(ticketId)) {
+      newSelected.delete(ticketId);
+    } else {
+      newSelected.add(ticketId);
+    }
+    setSelectedTickets(newSelected);
+  };
+
+  const isAllCurrentSelected = currentTickets.length > 0 && currentTickets.every(t => selectedTickets.has(t.id));
+  const isSomeCurrentSelected = currentTickets.some(t => selectedTickets.has(t.id));
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -240,44 +276,54 @@ const filteredTickets = tickets.filter((ticket) => {
             </p>
           </div>
         ) : (
-          <table className="w-full text-sm">
-<thead className="sticky top-0 bg-slate-50 border-b border-slate-200">
+          <table className="w-full text-left border-collapse table-compact">
+            <thead className="sticky top-0 bg-slate-50 z-10">
               <tr>
-                <th className="px-3 py-2 text-left text-xs font-bold text-slate-700 uppercase tracking-wide">
-                  Ticket
+                <th className="text-center w-12">
+                  <button
+                    onClick={handleSelectAll}
+                    className="flex items-center justify-center text-slate-600 hover:text-[#3da9d4] transition-colors"
+                  >
+                    {isAllCurrentSelected ? (
+                      <CheckSquare className="w-4 h-4" />
+                    ) : isSomeCurrentSelected ? (
+                      <div className="w-4 h-4 border-2 border-[#3da9d4] rounded bg-[#3da9d4]/10" />
+                    ) : (
+                      <Square className="w-4 h-4" />
+                    )}
+                  </button>
                 </th>
-                <th className="px-3 py-2 text-left text-xs font-bold text-slate-700 uppercase tracking-wide">
-                  Passenger
-                </th>
-                <th className="px-3 py-2 text-left text-xs font-bold text-slate-700 uppercase tracking-wide">
-                  Route
-                </th>
-                <th className="px-3 py-2 text-left text-xs font-bold text-slate-700 uppercase tracking-wide">
-                  Journey
-                </th>
-                <th className="px-3 py-2 text-left text-xs font-bold text-slate-700 uppercase tracking-wide">
-                  Seats
-                </th>
-                <th className="px-3 py-2 text-left text-xs font-bold text-slate-700 uppercase tracking-wide">
-                  Amount
-                </th>
-                <th className="px-3 py-2 text-left text-xs font-bold text-slate-700 uppercase tracking-wide">
-                  Status
-                </th>
-                <th className="px-3 py-2 text-center text-xs font-bold text-slate-700 uppercase tracking-wide">
-                  Actions
-                </th>
+                <th>Ticket</th>
+                <th>Passenger</th>
+                <th>Route</th>
+                <th>Journey</th>
+                <th>Seats</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th className="text-center">Actions</th>
               </tr>
             </thead>
             <tbody>
               {currentTickets.map((ticket, idx) => (
                 <tr
                   key={ticket.id}
-                  className={`border-b border-slate-100 hover:bg-slate-50/50 transition-colors ${
+                  className={`hover:bg-slate-50/80 transition-colors group ${
                     idx % 2 === 0 ? "" : ""
                   }`}
                 >
-                  <td className="px-3 py-2 whitespace-nowrap">
+                  <td className="text-center">
+                    <button
+                      onClick={() => handleSelectTicket(ticket.id)}
+                      className="flex items-center justify-center text-slate-600 hover:text-[#3da9d4] transition-colors"
+                    >
+                      {selectedTickets.has(ticket.id) ? (
+                        <CheckSquare className="w-4 h-4" />
+                      ) : (
+                        <Square className="w-4 h-4" />
+                      )}
+                    </button>
+                  </td>
+                  <td>
                     <div className="flex items-center gap-2">
                       <div
                         className={`w-2 h-2 rounded-full ${getStatusDot(
@@ -286,16 +332,16 @@ const filteredTickets = tickets.filter((ticket) => {
                       />
                       <a
                         href={`/tickets/${ticket.id}`}
-                        className="font-bold text-slate-800 text-xs hover:text-[#3da9d4] transition-colors flex items-center gap-1 group"
+                        className="font-bold text-slate-800 text-sm hover:text-[#3da9d4] transition-colors flex items-center gap-1 group"
                       >
                         {ticket.ticket_number}
                         <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                       </a>
                     </div>
                   </td>
-                  <td className="px-3 py-2">
+                  <td>
                     <div>
-                      <p className="font-medium text-slate-800 text-xs">
+                      <p className="font-medium text-slate-800 text-sm">
                         {ticket.passenger_name}
                       </p>
                       <p className="text-xs text-slate-500">
@@ -303,58 +349,58 @@ const filteredTickets = tickets.filter((ticket) => {
                       </p>
                     </div>
                   </td>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-1 text-xs text-slate-700">
+                  <td>
+                    <div className="flex items-center gap-1 text-sm text-slate-700">
                       <span className="truncate">{ticket.pickup_location}</span>
                       <ArrowRight className="w-3 h-3 text-slate-400 shrink-0" />
                       <span className="truncate">{ticket.drop_location}</span>
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-xs text-slate-800">
+                  <td className="text-sm text-slate-800">
                     {new Date(ticket.journey_date).toLocaleDateString("en-IN", {
                       day: "numeric",
                       month: "short",
                     })}
                   </td>
-                  <td className="px-3 py-2">
+                  <td>
                     <div className="flex items-center gap-1">
-                      <span className="text-xs font-medium text-slate-800">
+                      <span className="text-sm font-medium text-slate-800">
                         {ticket.total_seats}
                       </span>
-                      <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded whitespace-nowrap">
+                      <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded-md whitespace-nowrap">
                         {ticket.travel_type}
                       </span>
                     </div>
                   </td>
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    <div className="font-bold text-slate-800 text-xs">
+                  <td className="whitespace-nowrap">
+                    <div className="font-bold text-slate-800 text-sm">
                       ₹{ticket.amount.toLocaleString("en-IN")}
                     </div>
                   </td>
-<td className="px-3 py-2">
+                  <td>
                     <span
-                      className={`text-xs font-semibold px-2 py-1 rounded-full border ${getStatusColor(
+                      className={`badge-compact ${getStatusColor(
                         ticket.status
                       )}`}
                     >
                       {ticket.status}
                     </span>
                   </td>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center justify-center gap-1">
+                  <td className="text-center">
+                    <div className="flex items-center justify-center gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => setEditTicket(ticket)}
                         className="p-1.5 text-slate-600 hover:bg-slate-100 hover:text-amber-600 rounded transition-colors"
                         title="Edit Ticket"
                       >
-                        <Edit className="w-3.5 h-3.5" />
+                        <Edit className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => setDeleteConfirm(ticket.id)}
                         className="p-1.5 text-slate-600 hover:bg-slate-100 hover:text-rose-600 rounded transition-colors"
                         title="Cancel Ticket"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   </td>
@@ -365,28 +411,28 @@ const filteredTickets = tickets.filter((ticket) => {
         )}
       </div>
 
-{/* Pagination & Footer Stats */}
+      {/* Pagination & Footer Stats */}
       {filteredTickets.length > 0 && (
-        <div className="p-5 border-t border-slate-100 bg-slate-50/50 shrink-0 space-y-4">
+        <div className="pagination-compact space-y-4">
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2">
+            <div className="flex items-center justify-center gap-1">
               <button
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
-                className="p-1.5 text-slate-600 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed rounded transition-colors"
+                className="btn"
               >
-                <span className="text-xs">←</span>
+                <ChevronLeft className="w-4 h-4" />
               </button>
-              <span className="text-xs text-slate-600">
-                Page {currentPage} of {totalPages}
-              </span>
+              <div className="page-indicator">
+                {currentPage} / {totalPages}
+              </div>
               <button
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages}
-                className="p-1.5 text-slate-600 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed rounded transition-colors"
+                className="btn"
               >
-                <span className="text-xs">→</span>
+                <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           )}

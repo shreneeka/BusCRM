@@ -86,7 +86,7 @@ export default function CustomerList({
   return (
     <div className="saas-card bg-white flex flex-col h-full border-t-4 border-t-[#3da9d4]">
       {/* 1. Header & Search Bar */}
-      <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row gap-4 justify-between items-center bg-slate-50/50 shrink-0">
+      <div className="p-3 border-b border-slate-100 flex flex-col sm:flex-row gap-3 justify-between items-center bg-slate-50/50 shrink-0">
         <div className="relative w-full sm:flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input

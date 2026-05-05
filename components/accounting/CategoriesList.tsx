@@ -60,7 +60,7 @@ export default function CategoriesList({
 return (
     <div className="saas-card bg-white flex flex-col h-full">
       {/* Filters */}
-      <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row gap-2 items-center bg-slate-50/50 shrink-0">
+      <div className="p-3 border-b border-slate-100 flex flex-col sm:flex-row gap-2 items-center bg-slate-50/50 shrink-0">
         <div className="relative w-full sm:flex-1 sm:w-48">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
@@ -123,10 +123,10 @@ return (
                   key={category.id}
                   className="hover:bg-slate-50 transition-colors"
                 >
-                  <td className="px-4 py-4 font-medium text-slate-700">
+                  <td className="px-4 py-4 font-medium text-slate-700 text-sm">
                     {category.name}
                   </td>
-                  <td className="px-4 py-4 text-slate-600">
+                  <td className="px-4 py-4 text-slate-600 text-sm">
                     {category.category_type}
                   </td>
                   <td className="px-4 py-4">
@@ -136,8 +136,15 @@ return (
                       {category.is_active ? "Active" : "Inactive"}
                     </span>
                   </td>
-                  <td className="px-4 py-4 text-slate-600">
-                    {new Date(category.created_at).toLocaleDateString("en-GB")}
+                  <td className="px-4 py-4 text-slate-600 text-sm">
+                    {new Date(category.created_at).toLocaleDateString(
+                      "en-IN",
+                      {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                      }
+                    )}
                   </td>
                   <td className="px-4 py-4 flex items-center gap-2">
                     <button

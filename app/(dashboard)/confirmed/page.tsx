@@ -1,24 +1,22 @@
 import LeadList from "@/components/enquiry/LeadList";
-import { getConfirmedLeads, getCities } from "@/lib/actions/lead.actions";
+import { getLeads } from "@/lib/actions/lead.actions";
+import { getCities } from "@/lib/actions/lead.actions";
 
-export const dynamic = "force-dynamic";
-
-export default async function ConfirmedBookingsPage() {
-  const confirmedLeads = await getConfirmedLeads();
-  const cities = await getCities();
+export default async function ConfirmedPage() {
+  const [leads, cities] = await Promise.all([
+    getLeads(),
+    getCities()
+  ]);
 
   return (
-    <div className="flex flex-col h-full gap-4">
-      {/* TABLE COMPONENT */}
-      <div className="flex-1 min-h-0">
-        <LeadList
-          initialLeads={confirmedLeads}
-          cities={cities}
-          defaultStatus="Booked"
-          showStatusFilter={false}
-          emptyMessage="No confirmed bookings found yet."
-        />
-      </div>
+    <div className="h-[calc(100vh-144px)] animate-in fade-in duration-500">
+      <LeadList 
+        initialLeads={leads.filter(l => l.status === "Booked")} 
+        cities={cities}
+        showStatusFilter={false}
+        emptyMessage="No confirmed bookings found."
+      />
     </div>
   );
 }
+

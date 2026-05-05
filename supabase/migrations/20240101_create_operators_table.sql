@@ -28,9 +28,4 @@ WITH CHECK (true);
 INSERT INTO operators (operator_name, person_name, mobile_number, commission_percent, is_active) VALUES
 ('Express Travels', 'Raj Kumar', '9876543210', 10, true),
 ('City Bus Service', 'Amit Sharma', '9876543211', 10, true),
-('Tourist Bus', 'Vikram Singh', '9876543212', 10, true)
-ON CONFLICT (mobile_number) DO UPDATE SET
-  operator_name = EXCLUDED.operator_name,
-  person_name = EXCLUDED.person_name,
-  commission_percent = EXCLUDED.commission_percent,
-  is_active = EXCLUDED.is_active;
+('Tourist Bus', 'Vikram Singh', '9876543212', 10, true);

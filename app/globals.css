@@ -167,25 +167,120 @@
 }
 
 /* -----------------------------
-   4. COMPONENT CLASSES
+   4. TYPOGRAPHY & SPACING SYSTEM
+--------------------------------*/
+@layer base {
+  /* Base font sizes */
+  .text-xs { font-size: 0.75rem; line-height: 1rem; }
+  .text-sm { font-size: 0.875rem; line-height: 1.25rem; }
+  .text-base { font-size: 0.9375rem; line-height: 1.5rem; }
+  .text-lg { font-size: 1.125rem; line-height: 1.75rem; }
+  .text-xl { font-size: 1.25rem; line-height: 1.75rem; }
+  .text-2xl { font-size: 1.5rem; line-height: 2rem; }
+  
+  /* Spacing scale */
+  .space-y-1 > * + * { margin-top: 0.25rem; }
+  .space-y-2 > * + * { margin-top: 0.5rem; }
+  .space-y-3 > * + * { margin-top: 0.75rem; }
+  .space-y-4 > * + * { margin-top: 1rem; }
+  .space-y-6 > * + * { margin-top: 1.5rem; }
+  .space-y-8 > * + * { margin-top: 2rem; }
+  
+  .gap-1 { gap: 0.25rem; }
+  .gap-2 { gap: 0.5rem; }
+  .gap-3 { gap: 0.75rem; }
+  .gap-4 { gap: 1rem; }
+  .gap-6 { gap: 1.5rem; }
+  .gap-8 { gap: 2rem; }
+}
+
+/* -----------------------------
+   5. COMPONENT CLASSES
 --------------------------------*/
 @layer components {
   /* SaaS Card */
   .saas-card {
-    @apply bg-white rounded-xl border border-dashboard-border shadow-saas overflow-hidden transition-all;
+    @apply bg-white rounded-xl border border-dashboard-border shadow-sm overflow-hidden transition-all;
+    @apply p-2;
   }
+
+  .table-tight th, .table-tight td {
+    @apply px-4 py-3;
+  }
+
+  .table-tight thead {
+    @apply text-xs font-semibold;
+  }
+  
+  /* Compact Table Styles */
+  .table-compact thead {
+    @apply text-slate-500 text-[10px] uppercase tracking-wider border-b border-slate-200 shadow-sm;
+  }
+  
+  .table-compact thead th {
+    @apply px-4 py-4 font-bold whitespace-nowrap;
+  }
+  
+  .table-compact tbody td {
+    @apply px-4 py-3 whitespace-nowrap;
+  }
+  
+  .table-compact tbody {
+    @apply divide-y divide-slate-100;
+  }
+  
+  /* Compact Status Badge */
+  .badge-compact {
+    @apply text-[10px] px-2 py-1 rounded-md font-bold uppercase tracking-wider border;
+  }
+  
+  .badge-compact.active {
+    @apply bg-emerald-50 text-emerald-600 border-emerald-100;
+  }
+  
+  .badge-compact.inactive {
+    @apply bg-slate-100 text-slate-600 border-slate-200;
+  }
+  
+  /* Compact Button */
+  .btn-compact {
+    @apply px-2 py-1 text-xs font-medium rounded-lg transition-colors;
+  }
+  
+  /* Compact Pagination */
+  .pagination-compact {
+    @apply py-2 px-4 border-t border-slate-100 flex items-center justify-between bg-slate-50 shrink-0;
+  }
+  
+  .pagination-compact .text {
+    @apply text-sm text-slate-500 font-medium;
+  }
+  
+  .pagination-compact .text strong {
+    @apply text-slate-700;
+  }
+  
+  .pagination-compact .btn {
+    @apply flex items-center gap-1 px-2.5 py-1 text-sm font-medium rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm;
+  }
+  
+  .pagination-compact .page-indicator {
+    @apply px-3 py-1 text-sm font-bold text-[#3da9d4] bg-[#3da9d4]/10 border border-[#3da9d4]/20 rounded-lg shadow-sm;
+  }
+
 
   /* Input */
   .input-group {
     @apply grid gap-2;
   }
 
-  .input-primary {
+.input-primary {
     @apply block w-full rounded-lg border border-dashboard-border px-3 py-2 text-sm text-foreground shadow-sm placeholder:text-muted outline-none transition-all;
     @apply hover:border-slate-400;
     @apply focus:border-brand focus:ring-4 focus:ring-brand/10;
     pointer-events: auto;
   }
+
 
   .input-primary,
   .input-group select,
@@ -213,10 +308,12 @@
   }
 
 /* Button */
-  .btn-brand {
+.btn-brand {
     @apply bg-brand text-white font-medium px-4 py-2 rounded-lg transition-all active:scale-95 disabled:opacity-50;
     @apply hover:bg-brand-hover hover:shadow-md;
+    @apply text-sm;
   }
+
 
   /* Force pointer events on select */
   .input-primary,

@@ -1,23 +1,22 @@
-export const dynamic = "force-dynamic";
-
 import LeadList from "@/components/enquiry/LeadList";
-import { getFollowUpLeads, getCities } from "@/lib/actions/lead.actions";
+import { getLeads } from "@/lib/actions/lead.actions";
+import { getCities } from "@/lib/actions/lead.actions";
 
 export default async function FollowUpsPage() {
-  const followUpLeads = await getFollowUpLeads();
-  const cities = await getCities();
+  const [leads, cities] = await Promise.all([
+    getLeads(),
+    getCities()
+  ]);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-144px)] animate-in fade-in duration-500">
-      <div className="flex-1 min-h-0 w-full overflow-hidden">
-        <LeadList
-          initialLeads={followUpLeads}
-          cities={cities}
-          showCityFilters={true}
-          showStatusFilter={false}
-          emptyMessage="No follow-ups scheduled at the moment."
-        />
-      </div>
+    <div className="h-[calc(100vh-144px)] animate-in fade-in duration-500">
+      <LeadList 
+        initialLeads={leads.filter(l => l.status === "Follow Up")} 
+        cities={cities}
+        isFollowUpPage={true}
+        emptyMessage="No follow-ups found."
+      />
     </div>
   );
 }
+
