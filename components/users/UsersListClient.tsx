@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Search, Mail, Phone, Edit, UserPlus, Shield } from "lucide-react";
 import AddStaffModal from "./AddStaffModal";
 import EditStaffModal from "./EditStaffModal";
@@ -16,6 +17,7 @@ export default function UsersListClient({
 }: {
   initialUsers: any[];
 }) {
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -143,7 +145,10 @@ export default function UsersListClient({
       <AddStaffModal
         isOpen={isAddOpen}
         onClose={() => setIsAddOpen(false)}
-        onSuccess={() => setIsAddOpen(false)}
+        onSuccess={() => {
+          setIsAddOpen(false);
+          router.refresh();
+        }}
       />
       {editingUser && (
         <EditStaffModal
